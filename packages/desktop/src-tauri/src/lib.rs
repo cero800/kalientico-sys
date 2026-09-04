@@ -232,6 +232,7 @@ pub fn run() {
         .setup(|app| {
             let conn = open_database(app)?;
             repo::seed_usuario_admin(&conn)?;
+            repo::seed_cliente_mostrador(&conn)?;
             app.manage(Db(Mutex::new(conn)));
             Ok(())
         })

@@ -95,7 +95,7 @@ export const historialPagos = (empresa_id: number) => invoke<PagoLinea[]>('histo
 
 // Caja
 export const cajaAbierta = () => invoke<Caja | null>('caja_abierta');
-export const abrirCaja = (caja: CajaAbrirInput) => invoke('abrir_caja', { caja });
+export const abrirCaja = (caja: CajaAbrirInput) => invoke<void>('abrir_caja', { caja });
 export const cerrarCaja = (caja: CajaCerrarInput) => invoke('cerrar_caja', { caja });
 
 // Reporte y config

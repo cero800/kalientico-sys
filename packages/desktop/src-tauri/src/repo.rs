@@ -539,6 +539,23 @@ pub fn seed_usuario_admin(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Seed: cliente por defecto para ventas de mostrador (sin cliente explícito).
+/// Se crea solo en el primer arranque (cuando no existe ninguna empresa).
+pub fn seed_cliente_mostrador(conn: &Connection) -> Result<(), String> {
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM empresas", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    if count == 0 {
+        conn.execute(
+            "INSERT INTO empresas (rut_nit, nombre_comercial, dias_credito, limite_credito, activo)
+             VALUES ('0', 'Consumidor Final', 0, 0, 1)",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
@@ -550,5 +567,31 @@ match e {
             format!("Ya existe una {entidad}")
         }
         _ => e.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::*;
+
+    #[test]
+    fn seed_crea_consumidor_final_y_es_idempotente() {
+        let conn = conn();
+        seed_cliente_mostrador(&conn).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM empresas", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
+        // segunda llamada no duplica
+        seed_cliente_mostrador(&conn).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM empresas", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
+        let nombre: String = conn
+            .query_row("SELECT nombre_comercial FROM empresas WHERE rut_nit='0'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(nombre, "Consumidor Final");
     }
 }
