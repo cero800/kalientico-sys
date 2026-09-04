@@ -53,7 +53,8 @@ export default function InventarioPage() {
   const ejecutar = async () => {
     const pid = Number(productoId);
     const cant = Number(cantidad.replace(',', '.'));
-    if (!productoId || !Number.isFinite(cant) || cant <= 0) {
+    const esAjuste = accion === 'ajuste';
+    if (!productoId || !Number.isFinite(cant) || (esAjuste ? cant === 0 : cant <= 0)) {
       setError('Selecciona el producto e ingresa una cantidad válida');
       return;
     }
