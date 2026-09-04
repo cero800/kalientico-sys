@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "identifier": "com.panaderia.pos",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm --filter @panaderia/desktop dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm --filter @panaderia/desktop build",
     "frontendDist": "../dist"
   },
   "app": {

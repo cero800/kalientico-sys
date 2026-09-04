@@ -5,6 +5,7 @@
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
   },
+  "packageManager": "pnpm@11.24.0",
   "scripts": {
     "dev:desktop": "pnpm --filter @panaderia/desktop dev",
     "dev:mobile": "pnpm --filter @panaderia/mobile start",
