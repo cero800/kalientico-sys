@@ -91,6 +91,9 @@ pub fn cerrar_caja(conn: &Connection, i: &CajaCerrarInput) -> Result<(), String>
     }
     validators::validar_monto(i.efectivo_final_usd, "Efectivo final US$")?;
     validators::validar_monto(i.efectivo_final_ves, "Efectivo final Bs")?;
+    if !i.tasa_cierre.is_finite() || i.tasa_cierre <= 0.0 {
+        return Err("La tasa de cambio de cierre debe ser mayor que cero".to_string());
+    }
 
     // Efectivo de ventas del turno (pagos en efectivo de hoy, por moneda).
     let (ventas_usd, ventas_ves): (i64, i64) = conn
@@ -118,7 +121,7 @@ pub fn cerrar_caja(conn: &Connection, i: &CajaCerrarInput) -> Result<(), String>
     let esperado_ves = inicial_ves + ventas_ves;
     let diferencia_usd = i.efectivo_final_usd - esperado_usd;
     let diferencia_ves = i.efectivo_final_ves - esperado_ves;
-    let tasa_cierre = crate::reporte::get_tasa_cambio(conn)?;
+    let tasa_cierre = i.tasa_cierre;
 
     conn.execute(
         "UPDATE cajas
@@ -247,8 +250,9 @@ mod tests {
             &CajaCerrarInput {
                 caja_id,
                 operador_id: uid,
-                efectivo_final_usd: 110_00,  // esperado 100+10 = 110 → dif 0
-                efectivo_final_ves: 36_850,  // esperado 0+368.50 → dif 0
+                efectivo_final_usd: 110_00, // esperado 100+10 = 110 → dif 0
+                efectivo_final_ves: 36_850, // esperado 0+368.50 → dif 0
+                tasa_cierre: 37.5,          // se congela la tasa pasada, no la global
             },
         )
         .unwrap();
@@ -257,7 +261,7 @@ mod tests {
 
         let row = conn
             .query_row(
-                "SELECT efectivo_esperado_usd, efectivo_esperado_ves, diferencia_usd, diferencia_ves, estado
+                "SELECT efectivo_esperado_usd, efectivo_esperado_ves, diferencia_usd, diferencia_ves, estado, tasa_cierre
                  FROM cajas WHERE id = ?1",
                 params![caja_id],
                 |r| {
@@ -267,6 +271,7 @@ mod tests {
                         r.get::<_, i64>(2)?,
                         r.get::<_, i64>(3)?,
                         r.get::<_, String>(4)?,
+                        r.get::<_, f64>(5)?,
                     ))
                 },
             )
@@ -276,6 +281,7 @@ mod tests {
         assert_eq!(row.2, 0);
         assert_eq!(row.3, 0);
         assert_eq!(row.4, "cerrada");
+        assert_eq!(row.5, 37.5);
     }
 
     #[test]
@@ -293,6 +299,7 @@ mod tests {
                 operador_id: uid_a,
                 efectivo_final_usd: 0,
                 efectivo_final_ves: 0,
+                tasa_cierre: 36.85,
             },
         )
         .unwrap_err();
@@ -305,6 +312,7 @@ mod tests {
                 operador_id: uid_b,
                 efectivo_final_usd: 0,
                 efectivo_final_ves: 0,
+                tasa_cierre: 36.85,
             },
         )
         .unwrap_err();

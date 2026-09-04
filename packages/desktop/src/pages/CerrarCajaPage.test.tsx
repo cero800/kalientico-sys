@@ -47,14 +47,16 @@ beforeEach(() => {
   useSesion.setState({
     operador: { id: 1, nombre: 'Ana', rol: 'admin', activo: true },
     caja: caja as never,
+    tasa: 36.85,
   });
 });
 
 describe('CerrarCajaPage', () => {
-  it('pre-carga el arqueo con lo esperado y muestra diferencia cero', async () => {
+  it('pre-carga el arqueo con lo esperado, la tasa del día y diferencia cero', async () => {
     renderPagina();
     expect(await screen.findByLabelText(/Efectivo final US/)).toHaveValue('$100.00');
     expect(screen.getByLabelText(/Efectivo final Bs/)).toHaveValue('368,50');
+    expect(screen.getByLabelText(/Tasa de cambio al cierre/)).toHaveValue(36.85);
     expect(screen.getAllByText('$0.00').length).toBeGreaterThan(0);
   });
 
@@ -73,6 +75,7 @@ describe('CerrarCajaPage', () => {
     await screen.findByLabelText(/Efectivo final US/);
 
     await user.click(screen.getByRole('button', { name: /Cerrar caja/ }));
+    expect(screen.getByText(/Tasa de cierre:/)).toHaveTextContent('36.85 Bs/US$');
     await user.click(screen.getByRole('button', { name: /Sí, cerrar/ }));
 
     expect(cerrarCaja).toHaveBeenCalledWith({
@@ -80,8 +83,19 @@ describe('CerrarCajaPage', () => {
       operador_id: 1,
       efectivo_final_usd: 10000,
       efectivo_final_ves: 36850,
+      tasa_cierre: 36.85,
     });
     expect(useSesion.getState().caja).toBeNull();
     expect(await screen.findByText('Inicio')).toBeInTheDocument();
+  });
+
+  it('bloquea el cierre si la tasa es inválida', async () => {
+    const user = userEvent.setup();
+    renderPagina();
+    const tasaInput = await screen.findByLabelText(/Tasa de cambio al cierre/);
+    await user.clear(tasaInput);
+    await user.type(tasaInput, '0');
+    expect(screen.getByText('Tasa inválida')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Cerrar caja/ })).toBeDisabled();
   });
 });

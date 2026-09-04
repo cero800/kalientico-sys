@@ -220,6 +220,7 @@ export interface CajaCerrarInput {
   operador_id: number;
   efectivo_final_usd: number;
   efectivo_final_ves: number;
+  tasa_cierre: number;
 }
 
 //---------------------------------------------------------------------------

@@ -14,9 +14,11 @@ export default function CerrarCajaPage() {
   const caja = useSesion((s) => s.caja);
   const operador = useSesion((s) => s.operador);
   const setCaja = useSesion((s) => s.setCaja);
+  const tasa = useSesion((s) => s.tasa);
 
   const [efectivoUsd, setEfectivoUsd] = useState('');
   const [efectivoVes, setEfectivoVes] = useState('');
+  const [tasaCierre, setTasaCierre] = useState('');
   const [confirmar, setConfirmar] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,11 +31,15 @@ export default function CerrarCajaPage() {
         // formato Bs para editor
         return s.replace(/^Bs /, '');
       });
+      setTasaCierre(caja.tasa_cierre > 0 ? String(caja.tasa_cierre) : String(tasa));
     }
-  }, [caja]);
+  }, [caja, tasa]);
 
   const ingresadoUsd = parseCentsInput(efectivoUsd, 'usd');
   const ingresadoVes = parseCentsInput(efectivoVes, 'ves');
+
+  const tasaNum = parseFloat(tasaCierre.trim().replace(',', '.'));
+  const tasaValida = tasaCierre.trim() !== '' && Number.isFinite(tasaNum) && tasaNum > 0;
 
   const diferenciaUsd = caja ? (ingresadoUsd ?? 0) - caja.efectivo_esperado_usd : 0;
   const diferenciaVes = caja ? (ingresadoVes ?? 0) - caja.efectivo_esperado_ves : 0;
@@ -41,7 +47,7 @@ export default function CerrarCajaPage() {
   const montosValidos =
     efectivoUsd.trim() === '' || ingresadoUsd !== null ? true : false;
   const vesValido = efectivoVes.trim() === '' || ingresadoVes !== null ? true : false;
-  const puedeCerrar = montosValidos && vesValido && caja != null;
+  const puedeCerrar = montosValidos && vesValido && tasaValida && caja != null;
 
   const cerrar = async () => {
     if (!caja) return;
@@ -53,6 +59,7 @@ export default function CerrarCajaPage() {
         operador_id: operador!.id,
         efectivo_final_usd: ingresadoUsd ?? caja.efectivo_esperado_usd,
         efectivo_final_ves: ingresadoVes ?? caja.efectivo_esperado_ves,
+        tasa_cierre: tasaNum,
       });
       setCaja(null);
       navegar('/');
@@ -91,6 +98,17 @@ export default function CerrarCajaPage() {
 
           <div className="border-t border-gray-100 pt-4">
             <h3 className="mb-2 text-sm font-semibold text-gray-700">Arqueo real</h3>
+            <div className="mb-3">
+              <Input
+                label="Tasa de cambio al cierre (Bs/US$)"
+                type="number"
+                step="0.01"
+                min="0"
+                value={tasaCierre}
+                onChange={(e) => setTasaCierre(e.target.value)}
+                error={!tasaValida ? 'Tasa inválida' : undefined}
+              />
+            </div>
             <div className="flex gap-3">
               <div className="flex-1">
                 <Input
@@ -141,7 +159,9 @@ export default function CerrarCajaPage() {
           ) : (
             <div className="space-y-2">
               <p className="text-center text-sm text-gray-600">
-                ¿Confirmas el cierre? Se bloquea el punto de venta hasta abrir una nueva caja.
+                ¿Confirmas el cierre? Se bloquea el punto de venta hasta abrir una nueva
+                caja. Tasa de cierre:{' '}
+                <strong>{tasaCierre} Bs/US$</strong>.
               </p>
               <div className="flex gap-2">
                 <Button variant="secondary" className="flex-1" onClick={() => setConfirmar(false)}>

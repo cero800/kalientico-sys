@@ -209,6 +209,7 @@ pub struct CajaCerrarInput {
     pub operador_id: i64,
     pub efectivo_final_usd: i64,
     pub efectivo_final_ves: i64,
+    pub tasa_cierre: f64,
 }
 
 // ---- Usuarios ----
