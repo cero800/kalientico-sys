@@ -69,14 +69,6 @@ pub fn stock(conn: &Connection, producto_id: i64, cantidad: f64) {
     .unwrap();
 }
 
-pub fn abrir(conn: &Connection, operador_id: i64, usd: i64, ves: i64) {
-    caja::abrir_caja(
-        conn,
-        &CajaAbrirInput {
-            operador_id,
-            efectivo_inicial_usd: usd,
-            efectivo_inicial_ves: ves,
-        },
-    )
-    .unwrap();
+pub fn abrir(conn: &Connection, operador_id: i64) {
+    caja::abrir_caja(conn, &CajaAbrirInput { operador_id }).unwrap();
 }

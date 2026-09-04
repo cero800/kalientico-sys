@@ -199,8 +199,6 @@ pub struct Caja {
 #[derive(Deserialize)]
 pub struct CajaAbrirInput {
     pub operador_id: i64,
-    pub efectivo_inicial_usd: i64,
-    pub efectivo_inicial_ves: i64,
 }
 
 #[derive(Deserialize)]

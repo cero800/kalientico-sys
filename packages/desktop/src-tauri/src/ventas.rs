@@ -317,7 +317,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00); // $10.00
         stock(&conn, pid, 5.0);
@@ -354,7 +354,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00); // $10.00
 
@@ -382,7 +382,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
 
@@ -402,7 +402,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
 
@@ -416,7 +416,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
         stock(&conn, pid, 10.0);
@@ -431,7 +431,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
         stock(&conn, pid, 0.5);
@@ -462,7 +462,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
         stock(&conn, pid, 50.0);
@@ -478,7 +478,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
         stock(&conn, pid, 5.0);
@@ -515,7 +515,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
 

@@ -23,9 +23,13 @@ export default function LoginPage() {
       .finally(() => setCargando(false));
   }, []);
 
-  const elegir = (usuario: Usuario) => {
-    login(usuario);
-    navegar('/');
+  const elegir = async (usuario: Usuario) => {
+    try {
+      await login(usuario);
+      navegar('/');
+    } catch (e) {
+      setError(String(e));
+    }
   };
 
   if (operador) return <Navigate to="/" replace />;

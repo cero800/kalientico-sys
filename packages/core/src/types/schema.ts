@@ -211,8 +211,6 @@ export interface Caja {
 
 export interface CajaAbrirInput {
   operador_id: number;
-  efectivo_inicial_usd: number;
-  efectivo_inicial_ves: number;
 }
 
 export interface CajaCerrarInput {

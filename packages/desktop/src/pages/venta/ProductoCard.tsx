@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useSesion } from '../../store/sesion';
-import { formatUsdCents } from '../../lib/format';
+import { formatUsdCents, formatVesCents } from '../../lib/format';
 
 export function ProductoCard({
   nombre,
@@ -81,7 +81,7 @@ export function TasaBar() {
   return (
     <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
       <span>Tasa de hoy</span>
-      <strong className="text-sm text-gray-900">{formatUsdCents(Math.round(tasa * 100))}</strong>
+      <strong className="text-sm text-gray-900">{formatVesCents(Math.round(tasa * 100))}</strong>
     </div>
   );
 }

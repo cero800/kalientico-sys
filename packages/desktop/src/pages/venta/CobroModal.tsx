@@ -3,7 +3,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import type { Moneda, TipoPago, VentaInput } from '@panaderia/core';
 import { useCarrito } from '../../store/carrito';
 import { useSesion } from '../../store/sesion';
-import { formatCents, formatUsdCents, parseCentsInput } from '../../lib/format';
+import { formatUsdCents, formatVesCents, parseCentsInput } from '../../lib/format';
 import { validarCobertura } from '../../lib/pago';
 import type { MontoPago } from '../../lib/pago';
 import { Button } from '../../components/ui/Button';
@@ -231,7 +231,7 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
           )}
         </div>
 
-        <p className="text-xs text-gray-500">Equivalente Bs a la tasa {formatCents(Math.round(tasa * 100), 'usd')}</p>
+        <p className="text-xs text-gray-500">Equivalente Bs a la tasa {formatVesCents(Math.round(tasa * 100))}</p>
 
         {error && (
           <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">

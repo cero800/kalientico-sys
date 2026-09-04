@@ -58,19 +58,28 @@ pub fn exigir_caja_abierta(conn: &Connection) -> Result<i64, String> {
         .ok_or_else(|| "Debe abrir la caja de turno antes de registrar ventas o pagos".to_string())
 }
 
-/// Abre una nueva caja de turno con su efectivo inicial por moneda.
+/// Abre una nueva caja de turno. El efectivo inicial se hereda de la última
+/// caja cerrada (el "pico" que quedó en la gaveta); el primer día arranca en 0.
 pub fn abrir_caja(conn: &Connection, i: &CajaAbrirInput) -> Result<(), String> {
     if caja_abierta(conn)?.is_some() {
         return Err("Ya hay una caja abierta. Ciérrala antes de abrir otra.".to_string());
     }
-    validators::validar_monto(i.efectivo_inicial_usd, "Efectivo inicial US$")?;
-    validators::validar_monto(i.efectivo_inicial_ves, "Efectivo inicial Bs")?;
+    let (pico_usd, pico_ves) = conn
+        .query_row(
+            "SELECT efectivo_final_usd, efectivo_final_ves FROM cajas
+             WHERE estado = 'cerrada' ORDER BY id DESC LIMIT 1",
+            [],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .unwrap_or((0, 0));
     conn.execute(
         "INSERT INTO cajas (fecha, operador_id,
                             efectivo_inicial_usd, efectivo_esperado_usd,
                             efectivo_inicial_ves, efectivo_esperado_ves)
          VALUES (date('now'), ?1, ?2, ?2, ?3, ?3)",
-        params![i.operador_id, i.efectivo_inicial_usd, i.efectivo_inicial_ves],
+        params![i.operador_id, pico_usd, pico_ves],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -194,13 +203,13 @@ mod tests {
     }
 
     #[test]
-    fn abrir_caja_dual_y_consulta() {
+    fn abrir_caja_arranca_en_cero() {
         let conn = conn();
         let uid = usuario(&conn);
-        abrir(&conn, uid, 100_00, 5_000_00); // $100 + Bs 500
+        abrir(&conn, uid);
         let c = caja_abierta(&conn).unwrap().expect("hay caja abierta");
-        assert_eq!(c.efectivo_inicial_usd, 100_00);
-        assert_eq!(c.efectivo_inicial_ves, 5_000_00);
+        assert_eq!(c.efectivo_inicial_usd, 0);
+        assert_eq!(c.efectivo_inicial_ves, 0);
         assert_eq!(c.estado, "abierta");
     }
 
@@ -208,16 +217,8 @@ mod tests {
     fn doble_apertura_rechazada() {
         let conn = conn();
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
-        let err = abrir_caja(
-            &conn,
-            &CajaAbrirInput {
-                operador_id: uid,
-                efectivo_inicial_usd: 0,
-                efectivo_inicial_ves: 0,
-            },
-        )
-        .unwrap_err();
+        abrir(&conn, uid);
+        let err = abrir_caja(&conn, &CajaAbrirInput { operador_id: uid }).unwrap_err();
         assert!(err.contains("Ya hay una caja abierta"), "{err}");
     }
 
@@ -226,7 +227,7 @@ mod tests {
         let conn = conn();
         assert!(exigir_caja_abierta(&conn).is_err());
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         assert!(exigir_caja_abierta(&conn).is_ok());
     }
 
@@ -235,7 +236,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 100_00, 0); // abre con $100, Bs 0
+        abrir(&conn, uid); // día 1: arranca en 0
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
         stock(&conn, pid, 20.0);
@@ -250,7 +251,7 @@ mod tests {
             &CajaCerrarInput {
                 caja_id,
                 operador_id: uid,
-                efectivo_final_usd: 110_00, // esperado 100+10 = 110 → dif 0
+                efectivo_final_usd: 10_00, // esperado 0+10 = 10 → dif 0
                 efectivo_final_ves: 36_850, // esperado 0+368.50 → dif 0
                 tasa_cierre: 37.5,          // se congela la tasa pasada, no la global
             },
@@ -276,7 +277,7 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(row.0, 110_00);
+        assert_eq!(row.0, 10_00);
         assert_eq!(row.1, 36_850);
         assert_eq!(row.2, 0);
         assert_eq!(row.3, 0);
@@ -285,11 +286,59 @@ mod tests {
     }
 
     #[test]
+    fn abrir_hereda_pico_del_cierre_anterior() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        // Día 1: abre en 0, vende $10, cierra dejando pico $10 + Bs 368.50
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        let pid = producto(&conn, 10_00);
+        stock(&conn, pid, 20.0);
+        crate::ventas::crear_venta(&mut conn, &venta_usd(eid, pid, uid)).unwrap();
+        crate::ventas::crear_venta(&mut conn, &venta_ves(eid, pid, uid)).unwrap();
+        let caja1 = caja_abierta(&conn).unwrap().unwrap().id;
+        cerrar_caja(
+            &conn,
+            &CajaCerrarInput {
+                caja_id: caja1,
+                operador_id: uid,
+                efectivo_final_usd: 10_00,
+                efectivo_final_ves: 36_850,
+                tasa_cierre: 37.0,
+            },
+        )
+        .unwrap();
+
+        // Día 2: el pico queda como efectivo inicial y esperado
+        abrir(&conn, uid);
+        let caja2 = caja_abierta(&conn).unwrap().expect("caja abierta");
+        assert_eq!(caja2.efectivo_inicial_usd, 10_00);
+        assert_eq!(caja2.efectivo_inicial_ves, 36_850);
+        assert_eq!(caja2.efectivo_esperado_usd, 10_00);
+        assert_eq!(caja2.efectivo_esperado_ves, 36_850);
+
+        // Cerrar sin ventas → esperado = pico → diferencia 0
+        cerrar_caja(
+            &conn,
+            &CajaCerrarInput {
+                caja_id: caja2.id,
+                operador_id: uid,
+                efectivo_final_usd: 10_00,
+                efectivo_final_ves: 36_850,
+                tasa_cierre: 37.1,
+            },
+        )
+        .unwrap();
+        assert!(caja_abierta(&conn).unwrap().is_none());
+    }
+
+    #[test]
     fn cerrar_solo_el_mismo_operador_y_la_misma_caja() {
         let conn = conn();
         let uid_a = usuario(&conn);
         let uid_b = usuario(&conn);
-        abrir(&conn, uid_a, 0, 0);
+        abrir(&conn, uid_a);
         let caja_id = caja_abierta(&conn).unwrap().unwrap().id;
 
         let err_otra = cerrar_caja(

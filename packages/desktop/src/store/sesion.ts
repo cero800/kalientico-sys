@@ -7,7 +7,7 @@ interface SesionState {
   caja: Caja | null;
   tasa: number;
   inicializado: boolean;
-  login: (usuario: Usuario) => void;
+  login: (usuario: Usuario) => Promise<void>;
   logout: () => void;
   refrescar: () => Promise<void>;
   setCaja: (caja: Caja | null) => void;
@@ -21,9 +21,15 @@ export const useSesion = create<SesionState>((set) => ({
   tasa: 1,
   inicializado: false,
 
-  login: (usuario) => set({ operador: usuario }),
+  /** Inicia turno y re-sincroniza la realidad del backend (caja abierta + tasa). */
+  login: async (usuario) => {
+    set({ operador: usuario });
+    const [caja, tasa] = await Promise.all([cajaAbierta(), getTasaCambio()]);
+    set({ caja, tasa, inicializado: true });
+  },
 
-  logout: () => set({ operador: null, caja: null }),
+  /** Cierra la sesión del operador pero NO la caja: esta pertenece al backend. */
+  logout: () => set({ operador: null }),
 
   refrescar: async () => {
     const [caja, tasa] = await Promise.all([cajaAbierta(), getTasaCambio()]);

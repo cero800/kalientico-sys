@@ -56,7 +56,7 @@ describe('CerrarCajaPage', () => {
     renderPagina();
     expect(await screen.findByLabelText(/Efectivo final US/)).toHaveValue('$100.00');
     expect(screen.getByLabelText(/Efectivo final Bs/)).toHaveValue('368,50');
-    expect(screen.getByLabelText(/Tasa de cambio al cierre/)).toHaveValue(36.85);
+    expect(screen.getByLabelText(/Tasa de cierre/)).toHaveValue(36.85);
     expect(screen.getAllByText('$0.00').length).toBeGreaterThan(0);
   });
 
@@ -75,7 +75,7 @@ describe('CerrarCajaPage', () => {
     await screen.findByLabelText(/Efectivo final US/);
 
     await user.click(screen.getByRole('button', { name: /Cerrar caja/ }));
-    expect(screen.getByText(/Tasa de cierre:/)).toHaveTextContent('36.85 Bs/US$');
+    expect(screen.getByText(/Tasa de cierre:/)).toHaveTextContent('36.85 Bs');
     await user.click(screen.getByRole('button', { name: /Sí, cerrar/ }));
 
     expect(cerrarCaja).toHaveBeenCalledWith({
@@ -92,7 +92,7 @@ describe('CerrarCajaPage', () => {
   it('bloquea el cierre si la tasa es inválida', async () => {
     const user = userEvent.setup();
     renderPagina();
-    const tasaInput = await screen.findByLabelText(/Tasa de cambio al cierre/);
+    const tasaInput = await screen.findByLabelText(/Tasa de cierre/);
     await user.clear(tasaInput);
     await user.type(tasaInput, '0');
     expect(screen.getByText('Tasa inválida')).toBeInTheDocument();

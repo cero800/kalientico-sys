@@ -148,7 +148,7 @@ mod tests {
         let conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
 
         registrar_abono(&conn, &abono(eid, uid, 36_850, "ves")).unwrap(); // Bs 368.50 = $10
@@ -163,7 +163,7 @@ mod tests {
         let conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
 
         registrar_abono(&conn, &abono(eid, uid, 10_00, "usd")).unwrap();
@@ -180,7 +180,7 @@ mod tests {
         let conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
 
         let err = registrar_abono(&conn, &abono(eid, uid, 100, "eur")).unwrap_err();

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useSesion } from '../store/sesion';
 import { cn } from '../lib/cn';
-import { formatUsdCents } from '../lib/format';
+import { formatVesCents } from '../lib/format';
 import { Button } from './ui/Button';
 
 const nav: Array<{ to: string; label: string; icon: ReactNode }> = [
@@ -88,18 +88,9 @@ export default function Shell() {
             <span className="text-gray-500">
               Tasa del día:{' '}
               <strong className="text-gray-900" data-testid="tasa-bar">
-                {formatUsdCents(Math.round(useSesion.getState().tasa * 100))}
+                {formatVesCents(Math.round(useSesion.getState().tasa * 100))}
               </strong>
             </span>
-            {caja ? (
-              <span className="text-gray-500">
-                Efectivo inicial:{' '}
-                <strong className="text-gray-900">
-                  {formatUsdCents(caja.efectivo_inicial_usd)} /{' '}
-                  {formatUsdCents(caja.efectivo_inicial_ves)}
-                </strong>
-              </span>
-            ) : null}
           </div>
         </header>
 

@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Banknote, Landmark } from 'lucide-react';
 import { abrirCaja, getTasaCambio, setTasaCambio } from '../services/db';
 import { useSesion } from '../store/sesion';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
-import { parseCentsInput } from '../lib/format';
 
 export default function AbrirCajaPage() {
   const navegar = useNavigate();
@@ -15,8 +13,6 @@ export default function AbrirCajaPage() {
   const refrescar = useSesion((s) => s.refrescar);
 
   const [tasa, setTasa] = useState('');
-  const [efectivoUsd, setEfectivoUsd] = useState('');
-  const [efectivoVes, setEfectivoVes] = useState('');
   const [tasaCargada, setTasaCargada] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,30 +30,23 @@ export default function AbrirCajaPage() {
       setCampoError('tasa');
       return;
     }
-    const fUsd = parseCentsInput(efectivoUsd, 'usd') ?? 0;
-    const fVes = parseCentsInput(efectivoVes, 'ves') ?? 0;
-    if (efectivoUsd.trim() !== '' && parseCentsInput(efectivoUsd, 'usd') === null) {
-      setCampoError('usd');
-      return;
-    }
-    if (efectivoVes.trim() !== '' && parseCentsInput(efectivoVes, 'ves') === null) {
-      setCampoError('ves');
-      return;
-    }
 
     setGuardando(true);
     setError(null);
     setCampoError(null);
     try {
       await setTasaCambio(tasaNum);
-      await abrirCaja({
-        operador_id: operador!.id,
-        efectivo_inicial_usd: fUsd,
-        efectivo_inicial_ves: fVes,
-      });
+      await abrirCaja({ operador_id: operador!.id });
       await refrescar();
       navegar('/venta');
     } catch (e) {
+      // Si el backend ya tenía una caja abierta (estado desincronizado),
+      // recarga la realidad y continúa a la venta en vez de quedar atrapado.
+      await refrescar();
+      if (useSesion.getState().caja) {
+        navegar('/venta', { replace: true });
+        return;
+      }
       setError(String(e));
     } finally {
       setGuardando(false);
@@ -81,28 +70,13 @@ export default function AbrirCajaPage() {
         />
         <div className="space-y-4 p-5">
           <Input
-            label="Tasa del día (Bs por US$)"
-            hint="Se pre-carga con la última tasa guardada. Úsala para todas las ventas de hoy."
+            label="Tasa del día"
+            prefix={<span className="font-semibold">Bs</span>}
+            hint="Se pre-carga con la última tasa guardada (Bs por 1 US$). Úsala para todas las ventas de hoy."
             value={tasa}
             onChange={(e) => setTasa(e.target.value)}
             inputMode="decimal"
             error={campoError === 'tasa' ? 'Ingresa una tasa válida mayor que cero' : undefined}
-          />
-          <Input
-            label="Efectivo inicial en US$"
-            prefix={<Banknote className="h-4 w-4" />}
-            value={efectivoUsd}
-            onChange={(e) => setEfectivoUsd(e.target.value)}
-            placeholder="0.00"
-            error={campoError === 'usd' ? 'Monto no válido' : undefined}
-          />
-          <Input
-            label="Efectivo inicial en Bs"
-            prefix={<Landmark className="h-4 w-4" />}
-            value={efectivoVes}
-            onChange={(e) => setEfectivoVes(e.target.value)}
-            placeholder="0,00"
-            error={campoError === 'ves' ? 'Monto no válido' : undefined}
           />
 
           {error && (

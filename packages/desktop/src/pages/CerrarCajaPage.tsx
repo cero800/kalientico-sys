@@ -100,7 +100,8 @@ export default function CerrarCajaPage() {
             <h3 className="mb-2 text-sm font-semibold text-gray-700">Arqueo real</h3>
             <div className="mb-3">
               <Input
-                label="Tasa de cambio al cierre (Bs/US$)"
+                label="Tasa de cierre"
+                prefix={<span className="font-semibold">Bs</span>}
                 type="number"
                 step="0.01"
                 min="0"
@@ -160,8 +161,7 @@ export default function CerrarCajaPage() {
             <div className="space-y-2">
               <p className="text-center text-sm text-gray-600">
                 ¿Confirmas el cierre? Se bloquea el punto de venta hasta abrir una nueva
-                caja. Tasa de cierre:{' '}
-                <strong>{tasaCierre} Bs/US$</strong>.
+                caja. Tasa de cierre: <strong>{tasaCierre} Bs</strong>.
               </p>
               <div className="flex gap-2">
                 <Button variant="secondary" className="flex-1" onClick={() => setConfirmar(false)}>

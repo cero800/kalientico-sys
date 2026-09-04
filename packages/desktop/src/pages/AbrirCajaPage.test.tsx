@@ -40,7 +40,7 @@ describe('AbrirCajaPage', () => {
     useSesion.getState().logout();
   });
 
-  it('abre caja con tasa y efectivos iniciales y navega a venta', async () => {
+  it('abre caja con la tasa del día y navega a venta', async () => {
     const user = userEvent.setup();
     useSesion.getState().login({ id: 1, nombre: 'Ana', rol: 'admin', activo: true });
     abrirCaja.mockResolvedValue({ id: 7, fecha: 'hoy', operador_id: 1 } as never);
@@ -49,18 +49,10 @@ describe('AbrirCajaPage', () => {
     const tasa = await screen.findByLabelText(/Tasa del día/i);
     await user.clear(tasa);
     await user.type(tasa, '40');
-    await user.type(await screen.findByLabelText(/Efectivo inicial en US/i), '10');
-    await user.type(await screen.findByLabelText(/Efectivo inicial en Bs/i), '368,50');
     await user.click(screen.getByRole('button', { name: /Abrir caja/i }));
 
     await waitFor(() => expect(setTasaCambio).toHaveBeenCalledWith(40));
-    await waitFor(() =>
-      expect(abrirCaja).toHaveBeenCalledWith({
-        operador_id: 1,
-        efectivo_inicial_usd: 1000,
-        efectivo_inicial_ves: 36850,
-      }),
-    );
+    await waitFor(() => expect(abrirCaja).toHaveBeenCalledWith({ operador_id: 1 }));
     expect(await screen.findByText('Caja de ventas')).toBeInTheDocument();
     useSesion.getState().logout();
   });

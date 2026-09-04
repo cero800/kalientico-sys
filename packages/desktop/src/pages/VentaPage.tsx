@@ -4,7 +4,7 @@ import type { Empresa, Producto, Venta, VentaInput } from '@panaderia/core';
 import { crearVenta, listarEmpresas, listarPreciosCliente, listarProductos, listarStock } from '../services/db';
 import { useCarrito } from '../store/carrito';
 import { useSesion } from '../store/sesion';
-import { formatUsdCents } from '../lib/format';
+import { formatUsdCents, formatVesCents } from '../lib/format';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { PageLoader } from '../components/ui/Spinner';
@@ -122,7 +122,7 @@ export default function VentaPage() {
 
       {/* Carrito */}
       <Card className="flex w-80 shrink-0 flex-col">
-        <CardHeader title="Carrito" subtitle={`Tasa Bs/${formatUsdCents(Math.round(tasa * 100))}`} />
+        <CardHeader title="Carrito" subtitle={`Tasa ${formatVesCents(Math.round(tasa * 100))}`} />
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="px-3 pt-2">
             <label htmlFor="cliente-venta" className="mb-1 block text-xs font-medium text-gray-500">

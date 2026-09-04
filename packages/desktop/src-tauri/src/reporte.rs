@@ -202,7 +202,7 @@ mod tests {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
-        abrir(&conn, uid, 0, 0);
+        abrir(&conn, uid);
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
         stock(&conn, pid, 20.0);
