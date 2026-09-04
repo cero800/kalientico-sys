@@ -1,0 +1,18 @@
+{
+  "name": "panaderia-monorepo",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "scripts": {
+    "dev:desktop": "pnpm --filter @panaderia/desktop dev",
+    "dev:mobile": "pnpm --filter @panaderia/mobile start",
+    "build:core": "pnpm --filter @panaderia/core build",
+    "build:desktop": "pnpm --filter @panaderia/desktop build",
+    "clean": "pnpm -r exec rm -rf node_modules dist .turbo"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}

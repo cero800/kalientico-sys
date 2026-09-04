@@ -1,0 +1,165 @@
+// Validaciones centralizadas. Todas devuelven Result<(), String> con mensaje
+// legible para el usuario. Un error nunca debe llegar a comprometer la BD.
+
+// Límites de seguridad (evitar input desmedido).
+pub const MAX_MONTO: i64 = 999_999_999_99; // 999,999,999.99 (centavos)
+pub const MAX_CANTIDAD: f64 = 1_000_000.0;
+
+/// Monto no atómico general (precio, subtotal, total, pago).
+pub fn validar_monto(monto: i64, campo: &str) -> Result<(), String> {
+    if monto < 0 {
+        return Err(format!("{campo} no puede ser negativo"));
+    }
+    if monto > MAX_MONTO {
+        return Err(format!("{campo} excede el máximo permitido"));
+    }
+    Ok(())
+}
+
+/// Monto estrictamente positivo (un precio de venta nunca es 0/negativo).
+pub fn validar_monto_positivo(monto: i64, campo: &str) -> Result<(), String> {
+    if monto <= 0 {
+        return Err(format!("{campo} debe ser mayor que 0"));
+    }
+    validar_monto(monto, campo)
+}
+
+/// Cantidad (puede ser decimal para kg, entera para unidad).
+pub fn validar_cantidad(cantidad: f64, unidad: &str) -> Result<(), String> {
+    if !cantidad.is_finite() {
+        return Err("Cantidad no válida".to_string());
+    }
+    if cantidad <= 0.0 {
+        return Err("La cantidad debe ser mayor que 0".to_string());
+    }
+    if cantidad > MAX_CANTIDAD {
+        return Err("La cantidad excede el máximo permitido".to_string());
+    }
+    if unidad == "unidad" && cantidad.fract() != 0.0 {
+        return Err("En 'unidad' la cantidad debe ser un número entero".to_string());
+    }
+    Ok(())
+}
+
+/// Cantidad de un detalle de venta: además de los checks, exige entero para unidad.
+pub fn validar_cantidad_venta(cantidad: f64, unidad: &str) -> Result<(), String> {
+    if unidad == "unidad" && cantidad.fract() != 0.0 {
+        return Err("No se pueden vender fracciones de un producto en 'unidad'".to_string());
+    }
+    validar_cantidad(cantidad, "Cantidad")
+}
+
+/// IVA dentro de 0..100. Permite 0.
+pub fn validar_iva(porcentaje: f64) -> Result<(), String> {
+    if !porcentaje.is_finite() || porcentaje < 0.0 || porcentaje > 100.0 {
+        return Err("El impuesto debe estar entre 0 y 100".to_string());
+    }
+    Ok(())
+}
+
+/// Descuento entre 0 y subtotal (para que el total nunca quede negativo).
+pub fn validar_descuento(descuento: i64, subtotal: i64) -> Result<(), String> {
+    validar_monto(descuento, "Descuento")?;
+    if descuento > subtotal {
+        return Err("El descuento no puede superar el subtotal".to_string());
+    }
+    Ok(())
+}
+
+/// Tipo de pago en el enumerado cerrado.
+pub fn validar_tipo_pago(t: &str) -> Result<(), String> {
+    match t {
+        "efectivo" | "transferencia" | "cheque" | "mixto" => Ok(()),
+        _ => Err(format!("Tipo de pago inválido: {t}")),
+    }
+}
+
+/// Moneda soportada (por ahora US$ base y Bs).
+pub fn validar_moneda(m: &str) -> Result<(), String> {
+    match m {
+        "usd" | "ves" => Ok(()),
+        _ => Err(format!("Moneda inválida: {m}")),
+    }
+}
+
+/// Convierte un monto en céntimos de su moneda a céntimos de US$ (base).
+/// La tasa es la del parámetro (`tasa_cambio` = Bs por 1 US$).
+pub fn a_usd(monto: i64, moneda: &str, tasa: f64) -> Result<i64, String> {
+    validar_moneda(moneda)?;
+    if moneda == "usd" {
+        return Ok(monto);
+    }
+    if !tasa.is_finite() || tasa <= 0.0 {
+        return Err("Tasa de cambio inválida".to_string());
+    }
+    Ok((monto as f64 / tasa).round() as i64)
+}
+
+/// Unidad de medida válida.
+pub fn validar_unidad_medida(u: &str) -> Result<(), String> {
+    match u {
+        "unidad" | "kg" | "paquete" | "bandeja" | "caja" => Ok(()),
+        _ => Err(format!("Unidad de medida inválida: {u}")),
+    }
+}
+
+/// Rol de operador válido.
+pub fn validar_rol(r: &str) -> Result<(), String> {
+    match r {
+        "admin" | "cajero" => Ok(()),
+        _ => Err(format!("Rol inválido: {r}")),
+    }
+}
+
+/// Tipo de venta válido.
+pub fn validar_tipo_venta(t: &str) -> Result<(), String> {
+    match t {
+        "contado" | "credito" => Ok(()),
+        _ => Err(format!("Tipo de venta inválido: {t}")),
+    }
+}
+
+/// Normaliza la clave única (código de producto, NIT) para evitar duplicados
+/// "casi iguales" por espacios/capitalización.
+pub fn normalizar_clave(s: &str) -> String {
+    s.trim().to_uppercase().split_whitespace().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn monedas_validas() {
+        validar_moneda("usd").unwrap();
+        validar_moneda("ves").unwrap();
+        let err = validar_moneda("eur").unwrap_err();
+        assert!(err.contains("eur"));
+    }
+
+    #[test]
+    fn a_usd_es_identidad_en_usd() {
+        assert_eq!(a_usd(1234, "usd", 36.85).unwrap(), 1234);
+    }
+
+    #[test]
+    fn a_usd_convierte_ves() {
+        // Bs 368.50 (36.850 céntimos) / 36.85 = $ 10.00 (1.000 céntimos)
+        assert_eq!(a_usd(36_850, "ves", 36.85).unwrap(), 1000);
+    }
+
+    #[test]
+    fn a_usd_rechaza_tasa_y_moneda_invalidas() {
+        assert!(a_usd(100, "ves", 0.0).is_err());
+        assert!(a_usd(100, "ves", -3.0).is_err());
+        assert!(a_usd(100, "eur", 36.85).is_err());
+    }
+
+    #[test]
+    fn montos_y_descuentos() {
+        assert!(validar_monto_positivo(1, "X").is_ok());
+        assert!(validar_monto_positivo(0, "X").is_err());
+        assert!(validar_descuento(50, 100).is_ok());
+        assert!(validar_descuento(101, 100).is_err());
+    }
+}

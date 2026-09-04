@@ -1,0 +1,19 @@
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+packages/*/dist/
+packages/desktop/src-tauri/target/
+packages/desktop/src-tauri/gen/
+
+# Logs y archivos del sistema
+*.log
+.DS_Store
+*.local
+
+# Sidecars de graphify específicos de la máquina
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/cache/
+graphify-out/.graphify_*
