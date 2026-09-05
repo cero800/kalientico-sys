@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Minus, Plus, Search, ShoppingCart, Trash2, Users, X } from 'lucide-react';
-import type { Empresa, Producto, Venta, VentaInput } from '@panaderia/core';
-import { crearVenta, listarEmpresas, listarPreciosCliente, listarProductos, listarStock } from '../services/db';
+import type { Empresa, Factura, Producto, VentaInput } from '@panaderia/core';
+import { crearVenta, getFactura, listarEmpresas, listarPreciosCliente, listarProductos, listarStock } from '../services/db';
 import { useCarrito } from '../store/carrito';
 import { useSesion } from '../store/sesion';
 import { formatUsdCents, formatVesCents } from '../lib/format';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { PageLoader } from '../components/ui/Spinner';
+import { FacturaModal } from '../components/ui/FacturaModal';
 import { ProductoCard } from './venta/ProductoCard';
 import CobroModal from './venta/CobroModal';
 
@@ -26,7 +27,7 @@ export default function VentaPage() {
   const [preciosEspeciales, setPreciosEspeciales] = useState<Record<number, number>>({});
   const [cargando, setCargando] = useState(true);
   const [cobroAbierto, setCobroAbierto] = useState(false);
-  const [ultimaVenta, setUltimaVenta] = useState<Venta | null>(null);
+  const [factura, setFactura] = useState<Factura | null>(null);
 
   const lineas = useCarrito((s) => s.lineas);
   const agregar = useCarrito((s) => s.agregar);
@@ -73,9 +74,13 @@ export default function VentaPage() {
 
   const confirmarVenta = async (venta: VentaInput) => {
     const v = await crearVenta(venta);
-    setUltimaVenta(v);
     useCarrito.getState().vaciar();
     setCobroAbierto(false);
+    try {
+      setFactura(await getFactura(v.id));
+    } catch {
+      setFactura(null);
+    }
   };
 
   if (cargando) return <PageLoader />;
@@ -196,6 +201,11 @@ export default function VentaPage() {
               <span className="text-sm text-gray-500">Total</span>
               <strong className="text-xl text-gray-900">{formatUsdCents(subtotal)}</strong>
             </div>
+            {subtotal > 0 && (
+              <p className="mb-2 text-xs text-gray-500" data-testid="total-bs">
+                ≈ {formatVesCents(Math.round(subtotal * tasa))}
+              </p>
+            )}
             <Button className="w-full" size="lg" disabled={lineas.length === 0} onClick={() => setCobroAbierto(true)}>
               Cobrar
             </Button>
@@ -214,24 +224,8 @@ export default function VentaPage() {
         />
       )}
 
-      {/* Éxito */}
-      {ultimaVenta && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-xl">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl">
-              <span aria-hidden="true">✓</span>
-            </div>
-            <h2 className="text-lg font-bold text-gray-900">Venta registrada</h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Factura <strong>#{ultimaVenta.numero_factura}</strong> · total{' '}
-              <strong>{formatUsdCents(ultimaVenta.total)}</strong>
-            </p>
-            <Button className="mt-4 w-full" onClick={() => setUltimaVenta(null)}>
-              Aceptar
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Factura de la venta recién registrada */}
+      <FacturaModal factura={factura} onClose={() => setFactura(null)} />
     </div>
   );
 }

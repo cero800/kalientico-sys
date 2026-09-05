@@ -66,8 +66,13 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
   );
 
   const todosMontosValidos = pagos.every((p) => p.monto.trim() === '' || parseCentsInput(p.monto, p.moneda) !== null);
+  const referenciaFaltante = pagos.some((p) => p.tipo_pago !== 'efectivo' && p.numero_referencia.trim() === '');
   const puedeConfirmar =
-    !guardando && todosMontosValidos && (esContado ? validacion.valido : true) && (!descuento.trim() || descuentoCents !== null);
+    !guardando &&
+    !referenciaFaltante &&
+    todosMontosValidos &&
+    (esContado ? validacion.valido : true) &&
+    (!descuento.trim() || descuentoCents !== null);
 
   const confirmar = async () => {
     setGuardando(true);
@@ -101,6 +106,12 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
 
   const cambiar = (id: number, parcial: Partial<PagoForm>) =>
     setPagos((prev) => prev.map((p) => (p.id === id ? { ...p, ...parcial } : p)));
+
+  // En US$ solo se acepta efectivo: al elegir US$ se fuerza el tipo efectivo.
+  const cambiarMoneda = (id: number, moneda: Moneda) =>
+    setPagos((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, moneda, tipo_pago: moneda === 'usd' ? 'efectivo' : p.tipo_pago } : p)),
+    );
 
   return (
     <Modal
@@ -142,7 +153,7 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
                   <Select
                     aria-label={`Moneda pago ${i + 1}`}
                     value={p.moneda}
-                    onChange={(e) => cambiar(p.id, { moneda: e.target.value as Moneda })}
+                    onChange={(e) => cambiarMoneda(p.id, e.target.value as Moneda)}
                     className="px-2"
                   >
                     <option value="usd">US$</option>
@@ -154,11 +165,12 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
                     aria-label={`Tipo pago ${i + 1}`}
                     value={p.tipo_pago}
                     onChange={(e) => cambiar(p.id, { tipo_pago: e.target.value as TipoPago })}
+                    disabled={p.moneda === 'usd'}
                     className="px-2"
                   >
                     <option value="efectivo">Efectivo</option>
-                    <option value="transferencia">Transferencia</option>
-                    <option value="cheque">Cheque</option>
+                    <option value="pago_movil">Pago móvil</option>
+                    <option value="punto">Punto</option>
                   </Select>
                 </div>
                 <div className="flex-1">
@@ -177,6 +189,7 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
                       value={p.numero_referencia}
                       onChange={(e) => cambiar(p.id, { numero_referencia: e.target.value })}
                       placeholder="N° referencia"
+                      error={p.numero_referencia.trim() === '' ? 'Requerida' : undefined}
                     />
                   </div>
                 )}
@@ -220,12 +233,21 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
                 <strong>{formatUsdCents(validacion.pagadoUsd)}</strong>
               </div>
               {!validacion.valido && validacion.faltanteUsd > 0 && (
-                <p className="text-xs text-red-600">Faltan {formatUsdCents(validacion.faltanteUsd)}</p>
+                <p className="text-xs text-red-600">
+                  Faltan {formatUsdCents(validacion.faltanteUsd)}{' '}
+                  <span className="text-gray-400">({formatVesCents(Math.round(validacion.faltanteUsd * tasa))})</span>
+                </p>
               )}
               {validacion.valido && validacion.pagadoUsd > totalConDescuento && (
                 <p className="text-xs font-semibold text-emerald-600">
-                  Vuelto: {formatUsdCents(validacion.pagadoUsd - totalConDescuento)}
+                  Vuelto: {formatUsdCents(validacion.pagadoUsd - totalConDescuento)}{' '}
+                  <span className="font-normal text-gray-400">
+                    ({formatVesCents(Math.round((validacion.pagadoUsd - totalConDescuento) * tasa))})
+                  </span>
                 </p>
+              )}
+              {referenciaFaltante && (
+                <p className="text-xs text-red-600">El pago móvil y punto requieren el número de referencia</p>
               )}
             </>
           )}

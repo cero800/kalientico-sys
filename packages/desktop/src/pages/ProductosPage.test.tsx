@@ -53,6 +53,39 @@ describe('ProductosPage', () => {
     expect(crearProducto).toHaveBeenCalledWith(expect.objectContaining({ nombre: 'Pie de limón', precio_base: 0, activo: true }));
   });
 
+  it('acepta precios con decimales', async () => {
+    const user = userEvent.setup();
+    vi.mocked(crearProducto).mockResolvedValue(4 as never);
+    render(<ProductosPage />);
+    await screen.findByText('Pan Canilla');
+
+    await user.click(screen.getByRole('button', { name: /Nuevo producto/ }));
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/Nombre/), 'Pan canilla premium');
+    await user.type(within(dialog).getByLabelText(/Precio base/), '1.20');
+    await user.type(within(dialog).getByLabelText(/Precio mayoreo/), '54');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+
+    expect(crearProducto).toHaveBeenCalledWith(
+      expect.objectContaining({ nombre: 'Pan canilla premium', precio_base: 120, precio_mayoreo: 5400 }),
+    );
+  });
+
+  it('valida precios mal formados', async () => {
+    const user = userEvent.setup();
+    render(<ProductosPage />);
+    await screen.findByText('Pan Canilla');
+
+    await user.click(screen.getByRole('button', { name: /Nuevo producto/ }));
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/Nombre/), 'X');
+    await user.type(within(dialog).getByLabelText(/Precio base/), '1.2.3');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('precios válidos');
+    expect(crearProducto).not.toHaveBeenCalled();
+  });
+
   it('elimina un producto con confirmación', async () => {
     const user = userEvent.setup();
     render(<ProductosPage />);

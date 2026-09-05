@@ -79,6 +79,7 @@ pub fn registrar_abono(conn: &Connection, a: &AbonoInput) -> Result<(), String> 
     validators::validar_monto_positivo(a.monto, "Monto del abono")?;
     validators::validar_tipo_pago(&a.tipo_pago)?;
     validators::validar_moneda(&a.moneda)?;
+    validators::validar_combinacion_pago(&a.tipo_pago, &a.moneda, a.numero_referencia.as_deref())?;
     repo::empresa_existe(conn, a.empresa_id)?;
     let tasa_cambio = crate::reporte::get_tasa_cambio(conn)?;
     conn.execute(
@@ -102,7 +103,7 @@ pub fn registrar_abono(conn: &Connection, a: &AbonoInput) -> Result<(), String> 
 pub fn historial_pagos(conn: &Connection, empresa_id: i64) -> Result<Vec<PagoLinea>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT p.id, p.venta_id, v.numero_factura, p.monto, p.tipo_pago, p.moneda, p.tasa_cambio, p.fecha_pago
+            "SELECT p.id, p.venta_id, v.numero_factura, p.monto, p.tipo_pago, p.moneda, p.tasa_cambio, p.numero_referencia, p.fecha_pago
              FROM pagos p
              LEFT JOIN ventas v ON v.id = p.venta_id
              WHERE p.empresa_id = ?1
@@ -119,7 +120,8 @@ pub fn historial_pagos(conn: &Connection, empresa_id: i64) -> Result<Vec<PagoLin
                 tipo_pago: r.get(4)?,
                 moneda: r.get(5)?,
                 tasa_cambio: r.get(6)?,
-                fecha_pago: r.get(7)?,
+                numero_referencia: r.get(7)?,
+                fecha_pago: r.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -185,6 +187,50 @@ mod tests {
 
         let err = registrar_abono(&conn, &abono(eid, uid, 100, "eur")).unwrap_err();
         assert!(err.contains("Moneda inválida"), "{err}");
+    }
+
+    #[test]
+    fn abono_pago_movil_sin_referencia_falla() {
+        let conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+
+        let a = AbonoInput {
+            empresa_id: eid,
+            monto: 36_850,
+            tipo_pago: "pago_movil".into(),
+            moneda: "ves".into(),
+            numero_referencia: None,
+            operador_id: uid,
+        };
+        let err = registrar_abono(&conn, &a).unwrap_err();
+        assert!(err.contains("referencia"), "{err}");
+    }
+
+    #[test]
+    fn abono_pago_movil_en_bs_con_referencia_ok() {
+        let conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+
+        let a = AbonoInput {
+            empresa_id: eid,
+            monto: 36_850,
+            tipo_pago: "pago_movil".into(),
+            moneda: "ves".into(),
+            numero_referencia: Some("R-99".into()),
+            operador_id: uid,
+        };
+        registrar_abono(&conn, &a).unwrap();
+        let (tipo, refe): (String, String) = conn
+            .query_row("SELECT tipo_pago, numero_referencia FROM pagos", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!(tipo, "pago_movil");
+        assert_eq!(refe, "R-99");
     }
 }
 

@@ -1,5 +1,6 @@
 mod caja;
 mod db;
+mod factura;
 mod pagos;
 mod repo;
 mod reporte;
@@ -73,7 +74,7 @@ fn eliminar_producto(state: State<'_, Db>, id: i64) -> Result<(), String> {
     repo::eliminar_producto(&*lock(&state)?, id)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn listar_precios_cliente(state: State<'_, Db>, empresa_id: i64) -> Result<Vec<types::PrecioCliente>, String> {
     repo::listar_precios_cliente(&*lock(&state)?, empresa_id)
 }
@@ -106,7 +107,7 @@ fn listar_stock(state: State<'_, Db>) -> Result<Vec<types::StockItem>, String> {
     repo::listar_stock(&*lock(&state)?)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn registrar_produccion(
     state: State<'_, Db>,
     producto_id: i64,
@@ -119,7 +120,7 @@ fn registrar_produccion(
     repo::registrar_produccion(&mut conn, producto_id, cantidad, costo_unitario, operador_id, &fecha)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn registrar_merma(
     state: State<'_, Db>,
     producto_id: i64,
@@ -131,7 +132,7 @@ fn registrar_merma(
     repo::registrar_merma(&mut conn, producto_id, cantidad, &motivo, operador_id)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn registrar_ajuste(
     state: State<'_, Db>,
     producto_id: i64,
@@ -158,7 +159,7 @@ fn listar_ventas(state: State<'_, Db>) -> Result<Vec<types::Venta>, String> {
     ventas::listar_ventas(&*lock(&state)?)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn anular_venta(state: State<'_, Db>, venta_id: i64, motivo: String, operador_id: i64) -> Result<(), String> {
     let mut conn = lock(&state)?;
     ventas::anular_venta(&mut conn, venta_id, &motivo, operador_id)
@@ -168,7 +169,7 @@ fn anular_venta(state: State<'_, Db>, venta_id: i64, motivo: String, operador_id
 // Comandos — Pagos y estado de cuenta
 //---------------------------------------------------------------------------
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn estado_cuenta(state: State<'_, Db>, empresa_id: i64) -> Result<types::EstadoCuenta, String> {
     pagos::estado_cuenta(&*lock(&state)?, empresa_id)
 }
@@ -183,7 +184,7 @@ fn registrar_abono(state: State<'_, Db>, abono: AbonoInput) -> Result<(), String
     pagos::registrar_abono(&*lock(&state)?, &abono)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn historial_pagos(state: State<'_, Db>, empresa_id: i64) -> Result<Vec<types::PagoLinea>, String> {
     pagos::historial_pagos(&*lock(&state)?, empresa_id)
 }
@@ -203,7 +204,7 @@ fn abrir_caja(state: State<'_, Db>, caja: CajaAbrirInput) -> Result<(), String> 
 }
 
 #[tauri::command]
-fn cerrar_caja(state: State<'_, Db>, caja: CajaCerrarInput) -> Result<(), String> {
+fn cerrar_caja(state: State<'_, Db>, caja: CajaCerrarInput) -> Result<types::CierreDia, String> {
     caja::cerrar_caja(&*lock(&state)?, &caja)
 }
 
@@ -224,6 +225,11 @@ fn get_config(state: State<'_, Db>, clave: String) -> Result<Option<String>, Str
 #[tauri::command]
 fn set_config(state: State<'_, Db>, clave: String, valor: String) -> Result<(), String> {
     reporte::set_config(&*lock(&state)?, &clave, &valor)
+}
+
+#[tauri::command]
+fn obtener_factura(state: State<'_, Db>, venta_id: i64) -> Result<types::Factura, String> {
+    factura::factura_venta(&*lock(&state)?, venta_id)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -265,6 +271,7 @@ pub fn run() {
             resumen_dia,
             get_config,
             set_config,
+            obtener_factura,
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar la app Tauri");

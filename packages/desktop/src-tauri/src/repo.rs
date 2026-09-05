@@ -84,7 +84,7 @@ pub fn listar_productos(conn: &Connection) -> Result<Vec<Producto>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT id, codigo, nombre, descripcion, unidad_medida, precio_base,
-                    precio_mayoreo, impuesto_porcentaje, activo, creado_en
+                    precio_mayoreo, activo, creado_en
              FROM productos WHERE activo = 1 ORDER BY nombre ASC",
         )
         .map_err(|e| e.to_string())?;
@@ -98,9 +98,8 @@ pub fn listar_productos(conn: &Connection) -> Result<Vec<Producto>, String> {
                 unidad_medida: r.get(4)?,
                 precio_base: r.get(5)?,
                 precio_mayoreo: r.get(6)?,
-                impuesto_porcentaje: r.get(7)?,
-                activo: r.get(8)?,
-                creado_en: r.get(9)?,
+                activo: r.get(7)?,
+                creado_en: r.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -114,7 +113,8 @@ pub fn crear_producto(conn: &Connection, p: &ProductoInput) -> Result<i64, Strin
     }
     validators::validar_monto_positivo(p.precio_base, "Precio base")?;
     validators::validar_monto(p.precio_mayoreo, "Precio mayoreo")?;
-    validators::validar_iva(p.impuesto_porcentaje)?;
+    // Impuesto eliminado del negocio: siempre se guarda 0 (la columna se conserva).
+    let impuesto_porcentaje = 0.0;
     validators::validar_unidad_medida(&p.unidad_medida)?;
 
     conn.execute(
@@ -128,7 +128,7 @@ pub fn crear_producto(conn: &Connection, p: &ProductoInput) -> Result<i64, Strin
             p.unidad_medida,
             p.precio_base,
             p.precio_mayoreo,
-            p.impuesto_porcentaje,
+            impuesto_porcentaje,
             p.activo,
         ],
     )
@@ -146,7 +146,8 @@ pub fn crear_producto(conn: &Connection, p: &ProductoInput) -> Result<i64, Strin
 
 pub fn actualizar_producto(conn: &Connection, id: i64, p: &ProductoInput) -> Result<(), String> {
     validators::validar_monto_positivo(p.precio_base, "Precio base")?;
-    validators::validar_iva(p.impuesto_porcentaje)?;
+    // Impuesto eliminado del negocio: siempre se guarda 0 (la columna se conserva).
+    let impuesto_porcentaje = 0.0;
     validators::validar_unidad_medida(&p.unidad_medida)?;
     conn.execute(
         "UPDATE productos SET codigo=?1, nombre=?2, descripcion=?3, unidad_medida=?4,
@@ -159,7 +160,7 @@ pub fn actualizar_producto(conn: &Connection, id: i64, p: &ProductoInput) -> Res
             p.unidad_medida,
             p.precio_base,
             p.precio_mayoreo,
-            p.impuesto_porcentaje,
+            impuesto_porcentaje,
             p.activo,
             id,
         ],
@@ -201,14 +202,14 @@ pub fn empresa_existe(conn: &Connection, empresa_id: i64) -> Result<(), String> 
 
 /// Resuelve el precio de venta efectivo de un producto para una empresa
 /// (precio especial del cliente si existe, si no el precio base), junto con
-/// el impuesto y la unidad de medida.
+/// la unidad de medida. El porcentaje de impuesto ya no se aplica (siempre 0).
 pub fn precio_efectivo(
     conn: &Connection,
     producto_id: i64,
     empresa_id: i64,
 ) -> Result<(i64, f64, String), String> {
     conn.query_row(
-        "SELECT p.unidad_medida, p.impuesto_porcentaje,
+        "SELECT p.unidad_medida,
                 COALESCE(pc.precio_especial, p.precio_base)
          FROM productos p
          LEFT JOIN precios_cliente pc
@@ -218,12 +219,12 @@ pub fn precio_efectivo(
         |r| {
             Ok((
                 r.get::<_, String>(0)?,
-                r.get::<_, f64>(1)?,
-                r.get::<_, i64>(2)?,
+                r.get::<_, i64>(1)?,
             ))
         },
     )
-    .map(|(unidad, pct, precio)| (precio, pct, unidad))
+    // El impuesto quedó eliminado: la venta nunca aplica porcentaje.
+    .map(|(unidad, precio)| (precio, 0.0, unidad))
     .map_err(|_| "Producto no encontrado".to_string())
 }
 
@@ -593,5 +594,36 @@ mod tests {
             .query_row("SELECT nombre_comercial FROM empresas WHERE rut_nit='0'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(nombre, "Consumidor Final");
+    }
+
+    #[test]
+    fn producto_nunca_guarda_impuesto() {
+        let conn = conn();
+        let p = ProductoInput {
+            codigo: "P1".into(),
+            nombre: "Pan".into(),
+            descripcion: None,
+            unidad_medida: "unidad".into(),
+            precio_base: 500,
+            precio_mayoreo: 0,
+            activo: true,
+        };
+        let id = crear_producto(&conn, &p).unwrap();
+        let pct: f64 = conn
+            .query_row("SELECT impuesto_porcentaje FROM productos WHERE id = ?1", params![id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(pct, 0.0);
+
+        let p_mut = ProductoInput { precio_base: 600, ..p };
+        actualizar_producto(&conn, id, &p_mut).unwrap();
+        let pct: f64 = conn
+            .query_row("SELECT impuesto_porcentaje FROM productos WHERE id = ?1", params![id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(pct, 0.0);
+
+        let (precio, pct, unidad) = precio_efectivo(&conn, id, 1).unwrap();
+        assert_eq!(precio, 600);
+        assert_eq!(pct, 0.0);
+        assert_eq!(unidad, "unidad");
     }
 }

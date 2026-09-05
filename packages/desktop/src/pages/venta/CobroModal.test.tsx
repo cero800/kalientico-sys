@@ -99,4 +99,48 @@ describe('CobroModal', () => {
     await user.type(montos[0], '10.5.3');
     expect(screen.getByRole('button', { name: 'Confirmar venta' })).toBeDisabled();
   });
+
+  it('acepta pago móvil en Bs con referencia', async () => {
+    const user = userEvent.setup();
+    renderModal();
+    const pagos = screen.getAllByLabelText(/Monto pago/);
+    await user.selectOptions(screen.getAllByLabelText(/Moneda pago/)[0], 'ves');
+    await user.selectOptions(screen.getAllByLabelText(/Tipo pago/)[0], 'pago_movil');
+    await user.type(pagos[0], '368,50');
+    await user.type(screen.getByLabelText(/Referencia pago/), 'R-001');
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar venta' }));
+
+    const venta = onConfirmar.mock.calls[0][0];
+    expect(venta.pagos).toEqual([
+      { monto: 36850, tipo_pago: 'pago_movil', moneda: 'ves', numero_referencia: 'R-001' },
+    ]);
+  });
+
+  it('exige referencia en pago móvil y punto', async () => {
+    const user = userEvent.setup();
+    renderModal();
+    const pagos = screen.getAllByLabelText(/Monto pago/);
+    await user.selectOptions(screen.getAllByLabelText(/Moneda pago/)[0], 'ves');
+    await user.selectOptions(screen.getAllByLabelText(/Tipo pago/)[0], 'pago_movil');
+    await user.type(pagos[0], '368,50');
+
+    expect(screen.getByText(/número de referencia/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar venta' })).toBeDisabled();
+    expect(onConfirmar).not.toHaveBeenCalled();
+  });
+
+  it('en US$ solo permite efectivo', async () => {
+    const user = userEvent.setup();
+    renderModal();
+    const selectTipo = screen.getAllByLabelText(/Tipo pago/)[0];
+
+    await user.selectOptions(screen.getAllByLabelText(/Moneda pago/)[0], 'ves');
+    await user.selectOptions(selectTipo, 'punto');
+    expect(selectTipo).not.toBeDisabled();
+
+    await user.selectOptions(screen.getAllByLabelText(/Moneda pago/)[0], 'usd');
+    expect(selectTipo).toBeDisabled();
+    expect(selectTipo).toHaveValue('efectivo');
+  });
 });

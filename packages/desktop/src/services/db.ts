@@ -8,9 +8,11 @@ import type {
   Caja,
   CajaAbrirInput,
   CajaCerrarInput,
+  CierreDia,
   Empresa,
   EmpresaInput,
   EstadoCuenta,
+  Factura,
   PagoLinea,
   PrecioCliente,
   PrecioClienteInput,
@@ -29,10 +31,15 @@ export type {
   Caja,
   CajaAbrirInput,
   CajaCerrarInput,
+  CierreAbono,
+  CierreDia,
   DetalleVentaInput,
   Empresa,
   EmpresaInput,
   EstadoCuenta,
+  Factura,
+  FacturaDetalle,
+  FacturaPago,
   Moneda,
   MovimientoResumen,
   PagoInput,
@@ -96,12 +103,15 @@ export const historialPagos = (empresa_id: number) => invoke<PagoLinea[]>('histo
 // Caja
 export const cajaAbierta = () => invoke<Caja | null>('caja_abierta');
 export const abrirCaja = (caja: CajaAbrirInput) => invoke<void>('abrir_caja', { caja });
-export const cerrarCaja = (caja: CajaCerrarInput) => invoke('cerrar_caja', { caja });
+export const cerrarCaja = (caja: CajaCerrarInput) => invoke<CierreDia>('cerrar_caja', { caja });
 
 // Reporte y config
 export const resumenDia = (fecha?: string) => invoke<ResumenDia>('resumen_dia', { fecha: fecha ?? null });
 export const getConfig = (clave: string) => invoke<string | null>('get_config', { clave });
 export const setConfig = (clave: string, valor: string) => invoke('set_config', { clave, valor });
+
+// Factura imprimible de una venta
+export const getFactura = (venta_id: number) => invoke<Factura>('obtener_factura', { ventaId: venta_id });
 
 // Tasa de cambio (Bs por 1 US$) — conveniencia sobre get/setConfig.
 export const getTasaCambio = async (): Promise<number> => {

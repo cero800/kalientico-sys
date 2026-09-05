@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { cerrarCaja } from '../services/db';
+import { cerrarCaja, resumenDia } from '../services/db';
 import { useSesion } from '../store/sesion';
 import CerrarCajaPage from './CerrarCajaPage';
 
 vi.mock('../services/db', () => ({
   cerrarCaja: vi.fn(),
+  resumenDia: vi.fn(),
 }));
 
 const caja = {
@@ -31,6 +32,42 @@ const caja = {
   estado: 'abierta',
 };
 
+const resumen = {
+  producciones: [],
+  ventas: [
+    { venta_id: 1, numero_factura: 1, cliente: 'Mostrador', tipo: 'contado', monto: 5000, estado: 'entregada', tasa_cambio: 36.85 },
+    { venta_id: 2, numero_factura: 2, cliente: 'Pan S.A.', tipo: 'credito', monto: 3000, estado: 'entregada', tasa_cambio: 36.85 },
+  ],
+  pagos_efectivo_usd: 5000,
+  pagos_efectivo_ves: 36850,
+  deudores: [],
+};
+
+const cierre = {
+  caja_id: 7,
+  fecha: '2026-09-04',
+  operador_nombre: 'Ana',
+  negocio_nombre: 'Panadería El Trigal',
+  negocio_rif: '',
+  negocio_telefono: '',
+  negocio_direccion: '',
+  efectivo_inicial_usd: 5000,
+  efectivo_inicial_ves: 0,
+  efectivo_ventas_usd: 5000,
+  efectivo_ventas_ves: 36850,
+  abonos_efectivo_usd: 0,
+  abonos_efectivo_ves: 0,
+  efectivo_esperado_usd: 10000,
+  efectivo_esperado_ves: 36850,
+  ventas: resumen.ventas,
+  abonos: [],
+  total_ventas_usd: 8000,
+  total_ventas_bs: 294800,
+  total_abonos_usd: 0,
+  total_abonos_bs: 0,
+  tasa_cierre: 36.85,
+};
+
 const renderPagina = () =>
   render(
     <MemoryRouter initialEntries={['/cerrar-caja']}>
@@ -43,7 +80,9 @@ const renderPagina = () =>
 
 beforeEach(() => {
   vi.mocked(cerrarCaja).mockReset();
-  vi.mocked(cerrarCaja).mockResolvedValue(undefined as never);
+  vi.mocked(cerrarCaja).mockResolvedValue(cierre as never);
+  vi.mocked(resumenDia).mockReset();
+  vi.mocked(resumenDia).mockResolvedValue(resumen as never);
   useSesion.setState({
     operador: { id: 1, nombre: 'Ana', rol: 'admin', activo: true },
     caja: caja as never,
@@ -52,27 +91,23 @@ beforeEach(() => {
 });
 
 describe('CerrarCajaPage', () => {
-  it('pre-carga el arqueo con lo esperado, la tasa del día y diferencia cero', async () => {
+  it('muestra la cuenta del día con el esperado, sin arqueo manual', async () => {
     renderPagina();
-    expect(await screen.findByLabelText(/Efectivo final US/)).toHaveValue('$100.00');
-    expect(screen.getByLabelText(/Efectivo final Bs/)).toHaveValue('368,50');
+    expect(await screen.findByText('Cuenta del día')).toBeInTheDocument();
+    expect(screen.getByText(/#0001/)).toBeInTheDocument();
+    expect(screen.getByText('Mostrador')).toBeInTheDocument();
+    expect(screen.getByText('Pan S.A.')).toBeInTheDocument();
+    expect(screen.getAllByText('$50.00').length).toBeGreaterThan(0);
+    expect(screen.getByText('Bs 1.842,50')).toBeInTheDocument();
     expect(screen.getByLabelText(/Tasa de cierre/)).toHaveValue(36.85);
-    expect(screen.getAllByText('$0.00').length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText(/Efectivo final US/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Efectivo final Bs/)).not.toBeInTheDocument();
   });
 
-  it('muestra diferencias al editar el arqueo', async () => {
+  it('cierra la caja sin efectivo final y abre el comprobante del día', async () => {
     const user = userEvent.setup();
     renderPagina();
-    const usd = await screen.findByLabelText(/Efectivo final US/);
-    await user.clear(usd);
-    await user.type(usd, '90');
-    expect(screen.getByText('-$10.00')).toBeInTheDocument();
-  });
-
-  it('cierra la caja y navega al inicio', async () => {
-    const user = userEvent.setup();
-    renderPagina();
-    await screen.findByLabelText(/Efectivo final US/);
+    await screen.findByText('Cuenta del día');
 
     await user.click(screen.getByRole('button', { name: /Cerrar caja/ }));
     expect(screen.getByText(/Tasa de cierre:/)).toHaveTextContent('36.85 Bs');
@@ -81,11 +116,17 @@ describe('CerrarCajaPage', () => {
     expect(cerrarCaja).toHaveBeenCalledWith({
       caja_id: 7,
       operador_id: 1,
-      efectivo_final_usd: 10000,
-      efectivo_final_ves: 36850,
       tasa_cierre: 36.85,
     });
     expect(useSesion.getState().caja).toBeNull();
+
+    const dialog = await screen.findByRole('dialog', { name: /Cierre de caja/ });
+    expect(within(dialog).getByText(/Panadería El Trigal/)).toBeInTheDocument();
+    expect(within(dialog).getByText('Total del día')).toBeInTheDocument();
+    expect(within(dialog).getByText('$80.00')).toBeInTheDocument();
+    expect(within(dialog).getByText('Bs 2.948,00')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cerrar' }));
     expect(await screen.findByText('Inicio')).toBeInTheDocument();
   });
 

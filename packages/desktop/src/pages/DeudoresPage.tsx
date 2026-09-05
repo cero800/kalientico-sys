@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Plus, RefreshCw, Wallet } from 'lucide-react';
 import type { AbonoInput, EstadoCuenta, PagoLinea, Moneda, TipoPago } from '@panaderia/core';
+import { TIPO_PAGO_LABELS, toUsd, toVes } from '@panaderia/core';
 import { estadoCuenta, estadoCuentaTodos, historialPagos, registrarAbono } from '../services/db';
-import { formatCents, formatUsdCents, parseCentsInput } from '../lib/format';
+import { formatCents, formatUsdCents, formatVesCents, parseCentsInput } from '../lib/format';
 import { useSesion } from '../store/sesion';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -16,6 +17,7 @@ import { PageLoader } from '../components/ui/Spinner';
 
 export default function DeudoresPage() {
   const operadorId = useSesion((s) => s.operador?.id ?? 0);
+  const tasa = useSesion((s) => s.tasa);
   const [deudores, setDeudores] = useState<EstadoCuenta[]>([]);
   const [cargando, setCargando] = useState(true);
   const [seleccion, setSeleccion] = useState<EstadoCuenta | null>(null);
@@ -45,10 +47,17 @@ export default function DeudoresPage() {
 
   const abrirAbono = () => {
     setMoneda('ves');
+    setTipo('efectivo');
     setMonto('');
     setReferencia('');
     setError(null);
     setAbonoAbierto(true);
+  };
+
+  // En US$ solo se acepta efectivo: al elegir US$ se fuerza el tipo efectivo.
+  const cambiarMoneda = (m: Moneda) => {
+    setMoneda(m);
+    if (m === 'usd') setTipo('efectivo');
   };
 
   const guardarAbono = async () => {
@@ -83,6 +92,14 @@ export default function DeudoresPage() {
       setGuardando(false);
     }
   };
+
+  // Saldo pendiente en US$ (base) y conversiones en vivo según moneda elegida.
+  const tasaValida = tasa > 0;
+  const saldoUsd = seleccion?.saldo_pendiente ?? 0;
+  const montoCents = parseCentsInput(monto, moneda);
+  const montoUsd = montoCents === null ? 0 : toUsd(montoCents, moneda, tasa);
+  const quedaUsd = Math.max(saldoUsd - montoUsd, 0);
+  const aBs = (usd: number) => (tasaValida ? toVes(usd, 'usd', tasa) : null);
 
   if (cargando) return <PageLoader />;
 
@@ -171,8 +188,9 @@ export default function DeudoresPage() {
                   <tr key={p.id} className="border-b border-gray-50 last:border-0">
                     <Td className="font-mono text-xs">{p.numero_factura ? `#${p.numero_factura}` : 'Abono'}</Td>
                     <Td>
-                      <Badge tone={p.tipo_pago === 'efectivo' ? 'green' : 'blue'}>{p.tipo_pago}</Badge>{' '}
+                      <Badge tone={p.tipo_pago === 'efectivo' ? 'green' : 'blue'}>{TIPO_PAGO_LABELS[p.tipo_pago]}</Badge>{' '}
                       {p.moneda.toUpperCase()}
+                      {p.numero_referencia ? ` · Ref. ${p.numero_referencia}` : ''}
                     </Td>
                     <Td className="text-right">{formatCents(p.monto, p.moneda)}</Td>
                     <Td className="text-xs text-gray-500">{p.fecha_pago?.slice(0, 10) ?? '—'}</Td>
@@ -190,18 +208,35 @@ export default function DeudoresPage() {
       </>}>
         <div className="space-y-3">
           {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          <div className="grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-3 text-sm">
+            <div>
+              <p className="text-xs text-gray-500">Debe (saldo pendiente)</p>
+              <p className="font-bold text-red-600">{formatUsdCents(saldoUsd)}</p>
+              {aBs(saldoUsd) !== null && <p className="text-xs text-gray-600">{formatVesCents(aBs(saldoUsd)!)}</p>}
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Queda por pagar</p>
+              <p className="font-bold text-emerald-700">{formatUsdCents(quedaUsd)}</p>
+              {aBs(quedaUsd) !== null && <p className="text-xs text-gray-600">{formatVesCents(aBs(quedaUsd)!)}</p>}
+            </div>
+          </div>
           <div className="flex gap-3">
             <div className="flex-1">
-              <Select label="Moneda" value={moneda} onChange={(e) => setMoneda(e.target.value as Moneda)}>
+              <Select label="Moneda" value={moneda} onChange={(e) => cambiarMoneda(e.target.value as Moneda)}>
                 <option value="usd">US$</option>
                 <option value="ves">Bs</option>
               </Select>
             </div>
             <div className="flex-1">
-              <Select label="Tipo de pago" value={tipo} onChange={(e) => setTipo(e.target.value as TipoPago)}>
+              <Select
+                label="Tipo de pago"
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value as TipoPago)}
+                disabled={moneda === 'usd'}
+              >
                 <option value="efectivo">Efectivo</option>
-                <option value="transferencia">Transferencia</option>
-                <option value="cheque">Cheque</option>
+                <option value="pago_movil">Pago móvil</option>
+                <option value="punto">Punto</option>
               </Select>
             </div>
           </div>

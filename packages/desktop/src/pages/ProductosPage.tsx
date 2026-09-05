@@ -22,7 +22,6 @@ function vacio(): ProductoInput {
     unidad_medida: 'unidad',
     precio_base: 0,
     precio_mayoreo: 0,
-    impuesto_porcentaje: 0,
     activo: true,
   };
 }
@@ -34,6 +33,8 @@ export default function ProductosPage() {
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState<Producto | null>(null);
   const [form, setForm] = useState<ProductoInput>(vacio());
+  const [precioBaseTex, setPrecioBaseTex] = useState('');
+  const [precioMayoreoTex, setPrecioMayoreoTex] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -51,6 +52,8 @@ export default function ProductosPage() {
   const abrirNuevo = () => {
     setEditando(null);
     setForm(vacio());
+    setPrecioBaseTex('');
+    setPrecioMayoreoTex('');
     setError(null);
     setModal(true);
   };
@@ -63,9 +66,10 @@ export default function ProductosPage() {
       unidad_medida: p.unidad_medida,
       precio_base: p.precio_base,
       precio_mayoreo: p.precio_mayoreo,
-      impuesto_porcentaje: p.impuesto_porcentaje,
       activo: p.activo,
     });
+    setPrecioBaseTex((p.precio_base / 100).toFixed(2));
+    setPrecioMayoreoTex((p.precio_mayoreo / 100).toFixed(2));
     setError(null);
     setModal(true);
   };
@@ -75,13 +79,20 @@ export default function ProductosPage() {
       setError('El nombre es obligatorio');
       return;
     }
+    const precioBase = precioBaseTex.trim() === '' ? 0 : parseCentsInput(precioBaseTex, 'usd');
+    const precioMayoreo = precioMayoreoTex.trim() === '' ? 0 : parseCentsInput(precioMayoreoTex, 'usd');
+    if (precioBase == null || precioMayoreo == null) {
+      setError('Ingresa precios válidos en US$ (máx. 2 decimales)');
+      return;
+    }
+    const aGuardar = { ...form, precio_base: precioBase, precio_mayoreo: precioMayoreo };
     setGuardando(true);
     setError(null);
     try {
       if (editando) {
-        await actualizarProducto(editando.id, form);
+        await actualizarProducto(editando.id, aGuardar);
       } else {
-        await crearProducto(form);
+        await crearProducto(aGuardar);
       }
       setModal(false);
       cargar();
@@ -200,46 +211,36 @@ export default function ProductosPage() {
           )}
           <Input label="Código" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} placeholder="P-001" />
           <Input label="Nombre *" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <Select
-                label="Unidad"
-                value={form.unidad_medida}
-                onChange={(e) => setForm({ ...form, unidad_medida: e.target.value as UnidadMedida })}
-              >
-                {UNIDADES.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="flex-1">
-              <Input
-                label="Impuesto %"
-                type="number"
-                min={0}
-                max={100}
-                value={form.impuesto_porcentaje}
-                onChange={(e) => setForm({ ...form, impuesto_porcentaje: Number(e.target.value) })}
-              />
-            </div>
-          </div>
+          <Select
+            label="Unidad"
+            value={form.unidad_medida}
+            onChange={(e) => setForm({ ...form, unidad_medida: e.target.value as UnidadMedida })}
+          >
+            {UNIDADES.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </Select>
           <div className="flex gap-3">
             <div className="flex-1">
               <Input
                 label="Precio base (US$)"
                 prefix="$"
-                value={form.precio_base ? formatUsdCents(form.precio_base) : ''}
-                onChange={(e) => setForm({ ...form, precio_base: parseCentsInput(e.target.value, 'usd') ?? 0 })}
+                inputMode="decimal"
+                placeholder="1.20"
+                value={precioBaseTex}
+                onChange={(e) => setPrecioBaseTex(e.target.value)}
               />
             </div>
             <div className="flex-1">
               <Input
                 label="Precio mayoreo (US$)"
                 prefix="$"
-                value={form.precio_mayoreo ? formatUsdCents(form.precio_mayoreo) : ''}
-                onChange={(e) => setForm({ ...form, precio_mayoreo: parseCentsInput(e.target.value, 'usd') ?? 0 })}
+                inputMode="decimal"
+                placeholder="54.00"
+                value={precioMayoreoTex}
+                onChange={(e) => setPrecioMayoreoTex(e.target.value)}
               />
             </div>
           </div>

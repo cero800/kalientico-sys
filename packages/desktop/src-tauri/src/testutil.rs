@@ -54,7 +54,6 @@ pub fn producto(conn: &Connection, precio: i64) -> i64 {
             unidad_medida: "unidad".into(),
             precio_base: precio,
             precio_mayoreo: 0,
-            impuesto_porcentaje: 0.0,
             activo: true,
         },
     )

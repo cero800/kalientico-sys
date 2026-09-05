@@ -41,7 +41,7 @@ describe('validarCobertura', () => {
 describe('aMontoPago', () => {
   it('mapea desde PagoInput', () => {
     expect(
-      aMontoPago({ monto: 100, tipo_pago: 'transferencia', moneda: 'ves', numero_referencia: 'R-01' }),
-    ).toEqual({ monto: 100, tipo_pago: 'transferencia', moneda: 'ves', numero_referencia: 'R-01' });
+      aMontoPago({ monto: 100, tipo_pago: 'pago_movil', moneda: 'ves', numero_referencia: 'R-01' }),
+    ).toEqual({ monto: 100, tipo_pago: 'pago_movil', moneda: 'ves', numero_referencia: 'R-01' });
   });
 });

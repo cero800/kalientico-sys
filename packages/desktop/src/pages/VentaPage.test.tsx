@@ -3,8 +3,29 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useCarrito } from '../store/carrito';
 import { useSesion } from '../store/sesion';
-import { crearVenta } from '../services/db';
+import { crearVenta, getFactura } from '../services/db';
 import VentaPage from './VentaPage';
+
+const facturaMock = {
+  venta_id: 1,
+  numero_factura: 12,
+  tipo: 'contado',
+  estado: 'entregada',
+  fecha: '2026-09-04',
+  cliente: 'Consumidor Final',
+  cliente_rif: '0',
+  negocio_nombre: 'Panadería Kalientico',
+  negocio_rif: '',
+  negocio_telefono: '',
+  negocio_direccion: '',
+  subtotal: 500,
+  descuento: 0,
+  impuesto: 0,
+  total: 500,
+  tasa_cambio: 36.85,
+  detalle: [{ producto: 'Pan Canilla', cantidad: 1, precio_unitario: 500, subtotal: 500 }],
+  pagos: [{ tipo_pago: 'efectivo', moneda: 'usd', monto: 500, numero_referencia: null }],
+};
 
 vi.mock('../services/db', () => ({
   listarProductos: vi.fn().mockResolvedValue([
@@ -23,6 +44,7 @@ vi.mock('../services/db', () => ({
     empresaId === 2 ? Promise.resolve([{ id: 1, empresa_id: 2, producto_id: 1, precio_especial: 900 }]) : Promise.resolve([]),
   ),
   crearVenta: vi.fn(),
+  getFactura: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -36,6 +58,9 @@ beforeEach(() => {
   vi.mocked(crearVenta).mockResolvedValue({
     id: 1, empresa_id: 2, numero_factura: 12, tipo: 'contado', estado: 'entregada', fecha: '2026-09-04', subtotal: 900, descuento: 0, impuesto: 0, total: 900, operador_id: 1, moneda: 'usd', tasa_cambio: 36.85,
   } as never);
+
+  vi.mocked(getFactura).mockReset();
+  vi.mocked(getFactura).mockResolvedValue(facturaMock as never);
 });
 
 describe('VentaPage', () => {
@@ -77,9 +102,10 @@ describe('VentaPage', () => {
     await user.type(screen.getAllByLabelText(/Monto pago/)[0], '5');
     await user.click(screen.getByRole('button', { name: 'Confirmar venta' }));
 
-    expect(await screen.findByText('Venta registrada')).toBeInTheDocument();
     expect(crearVenta).toHaveBeenCalledWith(expect.objectContaining({ tipo: 'contado', empresa_id: 1, detalles: [{ producto_id: 1, cantidad: 1 }] }));
-    expect(await screen.findByText(/Factura/)).toBeInTheDocument();
+    expect(getFactura).toHaveBeenCalledWith(1);
+    expect(await screen.findByText('Factura')).toBeInTheDocument();
+    expect(screen.getByText('0012')).toBeInTheDocument();
     useCarrito.getState().vaciar();
   });
 });

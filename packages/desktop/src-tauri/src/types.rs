@@ -45,7 +45,6 @@ pub struct Producto {
     pub unidad_medida: String,
     pub precio_base: i64,
     pub precio_mayoreo: i64,
-    pub impuesto_porcentaje: f64,
     pub activo: bool,
     pub creado_en: Option<String>,
 }
@@ -58,7 +57,6 @@ pub struct ProductoInput {
     pub unidad_medida: String,
     pub precio_base: i64,
     pub precio_mayoreo: i64,
-    pub impuesto_porcentaje: f64,
     pub activo: bool,
 }
 
@@ -167,6 +165,7 @@ pub struct PagoLinea {
     pub tipo_pago: String,
     pub moneda: String,
     pub tasa_cambio: f64,
+    pub numero_referencia: Option<String>,
     pub fecha_pago: Option<String>,
 }
 
@@ -205,8 +204,6 @@ pub struct CajaAbrirInput {
 pub struct CajaCerrarInput {
     pub caja_id: i64,
     pub operador_id: i64,
-    pub efectivo_final_usd: i64,
-    pub efectivo_final_ves: i64,
     pub tasa_cierre: f64,
 }
 
@@ -229,8 +226,9 @@ pub struct UsuarioInput {
 
 // ---- Reporte / config ----
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct ResumenDiaVenta {
+    pub venta_id: i64,
     pub numero_factura: i64,
     pub cliente: String,
     pub tipo: String,
@@ -253,4 +251,88 @@ pub struct MovimientoResumen {
     pub producto: String,
     pub cantidad: f64,
     pub costo_unitario: i64,
+}
+
+// ---- Factura (comprobante imprimible) ----
+
+#[derive(Serialize)]
+pub struct FacturaDetalle {
+    pub producto: String,
+    pub cantidad: f64,
+    pub precio_unitario: i64,
+    pub subtotal: i64,
+}
+
+#[derive(Serialize)]
+pub struct FacturaPago {
+    pub tipo_pago: String,
+    pub moneda: String,
+    pub monto: i64,
+    pub numero_referencia: Option<String>,
+}
+
+/// Factura completa de una venta: cabecera + cliente + detalle + pagos +
+/// datos del negocio emisor (desde `config`) para el comprobante imprimible.
+#[derive(Serialize)]
+pub struct Factura {
+    pub venta_id: i64,
+    pub numero_factura: i64,
+    pub tipo: String,
+    pub estado: String,
+    pub fecha: String,
+    pub cliente: String,
+    pub cliente_rif: String,
+    pub negocio_nombre: String,
+    pub negocio_rif: String,
+    pub negocio_telefono: String,
+    pub negocio_direccion: String,
+    pub subtotal: i64,
+    pub descuento: i64,
+    pub impuesto: i64,
+    pub total: i64,
+    pub tasa_cambio: f64,
+    pub detalle: Vec<FacturaDetalle>,
+    pub pagos: Vec<FacturaPago>,
+}
+
+// ---- Cierre de caja (comprobante del día) ----
+
+/// Abono a cuenta registrado durante el día (venta_id nulo).
+#[derive(Serialize, Debug)]
+pub struct CierreAbono {
+    pub empresa_id: i64,
+    pub cliente: String,
+    pub tipo_pago: String,
+    pub moneda: String,
+    pub monto: i64,
+    pub tasa_cambio: f64,
+    pub fecha_pago: String,
+}
+
+/// Comprobante que se imprime al cerrar la caja: la cuenta del día con todas
+/// las ventas, los abonos y el efectivo esperado por moneda.
+#[derive(Serialize, Debug)]
+pub struct CierreDia {
+    pub caja_id: i64,
+    pub fecha: String,
+    pub operador_nombre: String,
+    pub negocio_nombre: String,
+    pub negocio_rif: String,
+    pub negocio_telefono: String,
+    pub negocio_direccion: String,
+    pub efectivo_inicial_usd: i64,
+    pub efectivo_inicial_ves: i64,
+    pub efectivo_ventas_usd: i64,
+    pub efectivo_ventas_ves: i64,
+    pub abonos_efectivo_usd: i64,
+    pub abonos_efectivo_ves: i64,
+    pub efectivo_esperado_usd: i64,
+    pub efectivo_esperado_ves: i64,
+    pub ventas: Vec<ResumenDiaVenta>,
+    pub abonos: Vec<CierreAbono>,
+    pub total_ventas_usd: i64,
+    pub total_ventas_bs: i64,
+    pub total_abonos_usd: i64,
+    pub total_abonos_bs: i64,
+    pub tasa_cierre: f64,
 }

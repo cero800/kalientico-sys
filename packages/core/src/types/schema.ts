@@ -9,11 +9,26 @@ export const MONEDAS: readonly Moneda[] = ['usd', 'ves'];
 
 // Tipos de venta y pago (enumerados cerrados en el backend).
 export type TipoVenta = 'contado' | 'credito';
-export type TipoPago = 'efectivo' | 'transferencia' | 'cheque' | 'mixto';
+export type TipoPago = 'efectivo' | 'pago_movil' | 'punto';
 export type Rol = 'admin' | 'cajero';
 export type UnidadMedida = 'unidad' | 'kg' | 'paquete' | 'bandeja' | 'caja';
 export type EstadoCaja = 'abierta' | 'cerrada';
 export type EstadoVenta = 'entregada' | 'anulada';
+
+// Etiquetas visibles de los tipos de pago.
+export const TIPO_PAGO_LABELS: Record<TipoPago, string> = {
+  efectivo: 'Efectivo',
+  pago_movil: 'Pago móvil',
+  punto: 'Punto de venta',
+};
+
+// Claves de configuración de los datos del negocio que encabezan las facturas.
+export const NEGOCIO_CONFIG_KEYS = {
+  nombre: 'negocio_nombre',
+  rif: 'negocio_rif',
+  telefono: 'negocio_telefono',
+  direccion: 'negocio_direccion',
+} as const;
 
 //---------------------------------------------------------------------------
 // Catálogo
@@ -53,7 +68,6 @@ export interface Producto {
   unidad_medida: UnidadMedida;
   precio_base: number;
   precio_mayoreo: number;
-  impuesto_porcentaje: number;
   activo: boolean;
   creado_en: string | null;
 }
@@ -65,7 +79,6 @@ export interface ProductoInput {
   unidad_medida: UnidadMedida;
   precio_base: number;
   precio_mayoreo: number;
-  impuesto_porcentaje: number;
   activo: boolean;
 }
 
@@ -164,6 +177,7 @@ export interface PagoLinea {
   tipo_pago: TipoPago;
   moneda: Moneda;
   tasa_cambio: number;
+  numero_referencia: string | null;
   fecha_pago: string | null;
 }
 
@@ -216,8 +230,6 @@ export interface CajaAbrirInput {
 export interface CajaCerrarInput {
   caja_id: number;
   operador_id: number;
-  efectivo_final_usd: number;
-  efectivo_final_ves: number;
   tasa_cierre: number;
 }
 
@@ -226,6 +238,7 @@ export interface CajaCerrarInput {
 //---------------------------------------------------------------------------
 
 export interface ResumenDiaVenta {
+  venta_id: number;
   numero_factura: number;
   cliente: string;
   tipo: TipoVenta;
@@ -246,4 +259,82 @@ export interface ResumenDia {
   pagos_efectivo_usd: number;
   pagos_efectivo_ves: number;
   deudores: EstadoCuenta[];
+}
+
+//---------------------------------------------------------------------------
+// Factura (comprobante imprimible)
+//---------------------------------------------------------------------------
+
+export interface FacturaDetalle {
+  producto: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+}
+
+export interface FacturaPago {
+  tipo_pago: TipoPago;
+  moneda: Moneda;
+  monto: number;
+  numero_referencia: string | null;
+}
+
+export interface Factura {
+  venta_id: number;
+  numero_factura: number;
+  tipo: TipoVenta;
+  estado: EstadoVenta;
+  fecha: string;
+  cliente: string;
+  cliente_rif: string;
+  negocio_nombre: string;
+  negocio_rif: string;
+  negocio_telefono: string;
+  negocio_direccion: string;
+  subtotal: number;
+  descuento: number;
+  impuesto: number;
+  total: number;
+  tasa_cambio: number;
+  detalle: FacturaDetalle[];
+  pagos: FacturaPago[];
+}
+
+//---------------------------------------------------------------------------
+// Cierre de caja (comprobante del día)
+//---------------------------------------------------------------------------
+
+export interface CierreAbono {
+  empresa_id: number;
+  cliente: string;
+  tipo_pago: TipoPago;
+  moneda: Moneda;
+  monto: number;
+  tasa_cambio: number;
+  fecha_pago: string;
+}
+
+export interface CierreDia {
+  caja_id: number;
+  fecha: string;
+  operador_nombre: string;
+  negocio_nombre: string;
+  negocio_rif: string;
+  negocio_telefono: string;
+  negocio_direccion: string;
+  efectivo_inicial_usd: number;
+  efectivo_inicial_ves: number;
+  efectivo_ventas_usd: number;
+  efectivo_ventas_ves: number;
+  abonos_efectivo_usd: number;
+  abonos_efectivo_ves: number;
+  efectivo_esperado_usd: number;
+  efectivo_esperado_ves: number;
+  ventas: ResumenDiaVenta[];
+  abonos: CierreAbono[];
+  total_ventas_usd: number;
+  total_ventas_bs: number;
+  total_abonos_usd: number;
+  total_abonos_bs: number;
+  tasa_cierre: number;
 }

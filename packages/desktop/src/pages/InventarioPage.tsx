@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Boxes, Hammer, MinusCircle, Plus, Settings2 } from 'lucide-react';
 import type { StockItem } from '@panaderia/core';
 import { listarProductos, listarStock, registrarAjuste, registrarMerma, registrarProduccion } from '../services/db';
+import { parseCentsInput } from '../lib/format';
 import type { Producto } from '@panaderia/core';
 import { useSesion } from '../store/sesion';
 import { Card } from '../components/ui/Card';
@@ -13,6 +14,7 @@ import { Table, THead, Th, Td } from '../components/ui/Table';
 import { Badge } from '../components/ui/Badge';
 import { EmptyState, PageHeader } from '../components/ui/Page';
 import { PageLoader } from '../components/ui/Spinner';
+import { DatePicker } from '../components/ui/DatePicker';
 
 type Accion = 'produccion' | 'merma' | 'ajuste';
 
@@ -48,6 +50,18 @@ export default function InventarioPage() {
     setMotivo('');
     setFecha(new Date().toISOString().slice(0, 10));
     setError(null);
+    if (a === 'produccion' && productoIdDefault != null) {
+      const p = productos.find((x) => x.id === productoIdDefault);
+      if (p) setCosto((p.precio_base / 100).toFixed(2));
+    }
+  };
+
+  const elegirProducto = (id: string) => {
+    setProductoId(id);
+    if (accion === 'produccion') {
+      const p = productos.find((x) => x.id === Number(id));
+      if (p) setCosto((p.precio_base / 100).toFixed(2));
+    }
   };
 
   const ejecutar = async () => {
@@ -69,7 +83,7 @@ export default function InventarioPage() {
         await registrarProduccion({
           producto_id: pid,
           cantidad: cant,
-          costo_unitario: Number(costo.replace(',', '.') || '0'),
+          costo_unitario: parseCentsInput(costo, 'usd') ?? 0,
           operador_id: operadorId,
           fecha,
         });
@@ -186,7 +200,7 @@ export default function InventarioPage() {
               {error}
             </p>
           )}
-          <Select label="Producto" value={productoId} onChange={(e) => setProductoId(e.target.value)}>
+          <Select label="Producto" value={productoId} onChange={(e) => elegirProducto(e.target.value)}>
             <option value="">— Seleccionar —</option>
             {productos.map((p) => (
               <option key={p.id} value={p.id}>
@@ -213,13 +227,17 @@ export default function InventarioPage() {
                   value={costo}
                   onChange={(e) => setCosto(e.target.value)}
                   placeholder="0.00"
+                  hint="Pre-cargado con el precio base del producto (editable)"
                 />
               </div>
             )}
           </div>
 
           {accion === 'produccion' && (
-            <Input label="Fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+            <div>
+              <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>
+              <DatePicker value={fecha} onChange={setFecha} aria-label="Fecha de producción" />
+            </div>
           )}
 
           {accion !== 'produccion' && (

@@ -58,18 +58,35 @@ describe('DeudoresPage', () => {
     });
   });
 
-  it('exige referencia en transferencias', async () => {
+  it('exige referencia en pagos móviles', async () => {
     const user = userEvent.setup();
     render(<DeudoresPage />);
     await user.click(await screen.findByText('Café del Centro'));
     await user.click(await screen.findByRole('button', { name: /Abono/ }));
 
     const dialog = screen.getByRole('dialog');
-    await user.selectOptions(within(dialog).getByLabelText(/Tipo de pago/), 'transferencia');
+    await user.selectOptions(within(dialog).getByLabelText(/Tipo de pago/), 'pago_movil');
     await user.type(within(dialog).getByLabelText(/Monto/), '100');
     await user.click(within(dialog).getByRole('button', { name: 'Guardar abono' }));
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('referencia');
     expect(registrarAbono).not.toHaveBeenCalled();
+  });
+
+  it('muestra en el abono el saldo pendiente y lo que queda por pagar en US$ y Bs', async () => {
+    const user = userEvent.setup();
+    useSesion.setState({ operador: { id: 1, nombre: 'Ana', rol: 'admin', activo: true }, tasa: 1 });
+    render(<DeudoresPage />);
+    await user.click(await screen.findByText('Café del Centro'));
+    await user.click(await screen.findByRole('button', { name: /Abono/ }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Debe (saldo pendiente)')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('$200.00')).toHaveLength(2);
+    expect(within(dialog).getAllByText('Bs 200,00')).toHaveLength(2);
+
+    await user.type(within(dialog).getByLabelText(/Monto/), '50');
+    expect(within(dialog).getByText('$150.00')).toBeInTheDocument();
+    expect(within(dialog).getByText('Bs 150,00')).toBeInTheDocument();
   });
 });

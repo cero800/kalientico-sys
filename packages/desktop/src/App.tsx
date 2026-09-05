@@ -12,6 +12,7 @@ import InventarioPage from './pages/InventarioPage';
 import ReportePage from './pages/ReportePage';
 import DeudoresPage from './pages/DeudoresPage';
 import CerrarCajaPage from './pages/CerrarCajaPage';
+import ConfiguracionPage from './pages/ConfiguracionPage';
 
 export default function App() {
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function App() {
               <Route path="/reporte" element={<ReportePage />} />
               <Route path="/deudores" element={<DeudoresPage />} />
               <Route path="/cerrar-caja" element={<CerrarCajaPage />} />
+              <Route path="/config" element={<ConfiguracionPage />} />
             </Route>
           </Route>
         </Route>

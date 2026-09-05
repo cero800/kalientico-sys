@@ -48,6 +48,7 @@ pub fn crear_venta(conn: &mut Connection, v: &VentaInput) -> Result<Venta, Strin
     for p in &v.pagos {
         validators::validar_monto_positivo(p.monto, "Monto del pago")?;
         validators::validar_tipo_pago(&p.tipo_pago)?;
+        validators::validar_combinacion_pago(&p.tipo_pago, &p.moneda, p.numero_referencia.as_deref())?;
         pagado_usd += validators::a_usd(p.monto, &p.moneda, tasa_cambio)?;
     }
     if v.tipo == "contado" && pagado_usd < total {
@@ -121,6 +122,7 @@ pub fn crear_venta(conn: &mut Connection, v: &VentaInput) -> Result<Venta, Strin
             validators::validar_monto_positivo(p.monto, "Monto del pago")?;
             validators::validar_tipo_pago(&p.tipo_pago)?;
             validators::validar_moneda(&p.moneda)?;
+            validators::validar_combinacion_pago(&p.tipo_pago, &p.moneda, p.numero_referencia.as_deref())?;
             tx.execute(
                 "INSERT INTO pagos (empresa_id, venta_id, monto, tipo_pago, moneda, tasa_cambio, numero_referencia, operador_id)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -409,6 +411,106 @@ mod tests {
         let err = crear_venta(&mut conn, &venta(eid, pid, uid, "contado", vec![pago_usd(10_02)]))
             .unwrap_err();
         assert!(err.contains("supera"), "{err}");
+    }
+
+    #[test]
+    fn venta_usd_con_pago_movil_falla() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        let pid = producto(&conn, 10_00);
+
+        let v = VentaInput {
+            empresa_id: eid,
+            tipo: "contado".into(),
+            descuento: 0,
+            detalles: vec![DetalleVentaInput {
+                producto_id: pid,
+                cantidad: 1.0,
+            }],
+            pagos: vec![PagoInput {
+                monto: 10_00,
+                tipo_pago: "pago_movil".into(),
+                moneda: "usd".into(),
+                numero_referencia: Some("R-1".into()),
+            }],
+            operador_id: uid,
+        };
+        let err = crear_venta(&mut conn, &v).unwrap_err();
+        assert!(err.contains("US$"), "{err}");
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM ventas", [], |r| r.get::<_, i64>(0)).unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn venta_pago_movil_sin_referencia_falla() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        let pid = producto(&conn, 10_00);
+
+        let v = VentaInput {
+            empresa_id: eid,
+            tipo: "contado".into(),
+            descuento: 0,
+            detalles: vec![DetalleVentaInput {
+                producto_id: pid,
+                cantidad: 1.0,
+            }],
+            pagos: vec![PagoInput {
+                monto: 36_850,
+                tipo_pago: "pago_movil".into(),
+                moneda: "ves".into(),
+                numero_referencia: None,
+            }],
+            operador_id: uid,
+        };
+        let err = crear_venta(&mut conn, &v).unwrap_err();
+        assert!(err.contains("referencia"), "{err}");
+    }
+
+    #[test]
+    fn venta_pago_movil_en_bs_con_referencia_ok() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        let pid = producto(&conn, 10_00);
+        stock(&conn, pid, 10.0);
+
+        let v = crear_venta(
+            &mut conn,
+            &VentaInput {
+                empresa_id: eid,
+                tipo: "contado".into(),
+                descuento: 0,
+                detalles: vec![DetalleVentaInput {
+                    producto_id: pid,
+                    cantidad: 1.0,
+                }],
+                pagos: vec![PagoInput {
+                    monto: 36_850, // Bs 368.50 = $10.00
+                    tipo_pago: "pago_movil".into(),
+                    moneda: "ves".into(),
+                    numero_referencia: Some("R-1".into()),
+                }],
+                operador_id: uid,
+            },
+        )
+        .unwrap();
+        assert_eq!(v.total, 10_00);
+        let (tipo, refe): (String, String) = conn
+            .query_row("SELECT tipo_pago, numero_referencia FROM pagos", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!(tipo, "pago_movil");
+        assert_eq!(refe, "R-1");
     }
 
     #[test]

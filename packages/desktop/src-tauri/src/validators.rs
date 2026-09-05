@@ -49,14 +49,6 @@ pub fn validar_cantidad_venta(cantidad: f64, unidad: &str) -> Result<(), String>
     validar_cantidad(cantidad, "Cantidad")
 }
 
-/// IVA dentro de 0..100. Permite 0.
-pub fn validar_iva(porcentaje: f64) -> Result<(), String> {
-    if !porcentaje.is_finite() || porcentaje < 0.0 || porcentaje > 100.0 {
-        return Err("El impuesto debe estar entre 0 y 100".to_string());
-    }
-    Ok(())
-}
-
 /// Descuento entre 0 y subtotal (para que el total nunca quede negativo).
 pub fn validar_descuento(descuento: i64, subtotal: i64) -> Result<(), String> {
     validar_monto(descuento, "Descuento")?;
@@ -69,9 +61,24 @@ pub fn validar_descuento(descuento: i64, subtotal: i64) -> Result<(), String> {
 /// Tipo de pago en el enumerado cerrado.
 pub fn validar_tipo_pago(t: &str) -> Result<(), String> {
     match t {
-        "efectivo" | "transferencia" | "cheque" | "mixto" => Ok(()),
+        "efectivo" | "pago_movil" | "punto" => Ok(()),
         _ => Err(format!("Tipo de pago inválido: {t}")),
     }
+}
+
+/// Combina la regla de negocio entre tipo de pago y moneda:
+/// - En US$ el pago solo puede ser efectivo (divisas).
+/// - Pago móvil y punto requieren el número de referencia.
+pub fn validar_combinacion_pago(tipo: &str, moneda: &str, numero_referencia: Option<&str>) -> Result<(), String> {
+    if moneda == "usd" && tipo != "efectivo" {
+        return Err("En US$ el pago debe ser en efectivo (divisas)".to_string());
+    }
+    if tipo == "pago_movil" || tipo == "punto" {
+        if numero_referencia.map(|r| r.trim().is_empty()).unwrap_or(true) {
+            return Err("El pago móvil y punto requieren el número de referencia".to_string());
+        }
+    }
+    Ok(())
 }
 
 /// Moneda soportada (por ahora US$ base y Bs).
@@ -135,6 +142,34 @@ mod tests {
         validar_moneda("ves").unwrap();
         let err = validar_moneda("eur").unwrap_err();
         assert!(err.contains("eur"));
+    }
+
+    #[test]
+    fn combinacion_pago_acepta_solo_los_métodos_vigentes() {
+        validar_tipo_pago("efectivo").unwrap();
+        validar_tipo_pago("pago_movil").unwrap();
+        validar_tipo_pago("punto").unwrap();
+        assert!(validar_tipo_pago("transferencia").is_err());
+        assert!(validar_tipo_pago("cheque").is_err());
+        assert!(validar_tipo_pago("mixto").is_err());
+    }
+
+    #[test]
+    fn usd_solo_efectivo() {
+        validar_combinacion_pago("efectivo", "usd", None).unwrap();
+        let err = validar_combinacion_pago("pago_movil", "usd", Some("REF1")).unwrap_err();
+        assert!(err.contains("US$"), "{err}");
+        validar_combinacion_pago("pago_movil", "ves", Some("REF1")).unwrap();
+        validar_combinacion_pago("punto", "ves", Some("REF2")).unwrap();
+        validar_combinacion_pago("efectivo", "ves", None).unwrap();
+    }
+
+    #[test]
+    fn pago_movil_y_punto_exigen_referencia() {
+        let err = validar_combinacion_pago("pago_movil", "ves", None).unwrap_err();
+        assert!(err.contains("referencia"), "{err}");
+        let err = validar_combinacion_pago("punto", "ves", Some("  ")).unwrap_err();
+        assert!(err.contains("referencia"), "{err}");
     }
 
     #[test]

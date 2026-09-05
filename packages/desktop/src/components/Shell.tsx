@@ -9,6 +9,7 @@ import {
   Wallet,
   LogOut,
   Coins,
+  Settings,
 } from 'lucide-react';
 import { useSesion } from '../store/sesion';
 import { cn } from '../lib/cn';
@@ -23,6 +24,7 @@ const nav: Array<{ to: string; label: string; icon: ReactNode }> = [
   { to: '/reporte', label: 'Reporte', icon: <BarChart3 className="h-4 w-4" /> },
   { to: '/deudores', label: 'Deudores', icon: <Wallet className="h-4 w-4" /> },
   { to: '/cerrar-caja', label: 'Cerrar caja', icon: <Coins className="h-4 w-4" /> },
+  { to: '/config', label: 'Configuración', icon: <Settings className="h-4 w-4" /> },
 ];
 
 export default function Shell() {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { BarChart3, RefreshCw } from 'lucide-react';
-import type { ResumenDia } from '@panaderia/core';
-import { resumenDia } from '../services/db';
+import { BarChart3, FileText, RefreshCw } from 'lucide-react';
+import type { Factura, ResumenDia } from '@panaderia/core';
+import { getFactura, resumenDia } from '../services/db';
 import { formatUsdCents } from '../lib/format';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -9,11 +9,15 @@ import { Table, THead, Th, Td } from '../components/ui/Table';
 import { Badge } from '../components/ui/Badge';
 import { EmptyState, PageHeader } from '../components/ui/Page';
 import { PageLoader } from '../components/ui/Spinner';
+import { FacturaModal } from '../components/ui/FacturaModal';
+import { DatePicker } from '../components/ui/DatePicker';
 
 export default function ReportePage() {
   const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
   const [dato, setDato] = useState<ResumenDia | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [factura, setFactura] = useState<Factura | null>(null);
+  const [cargandoFactura, setCargandoFactura] = useState(false);
 
   const cargar = (f: string) => {
     setCargando(true);
@@ -29,6 +33,18 @@ export default function ReportePage() {
 
   const ventasEntregadas = (dato?.ventas ?? []).filter((v) => v.estado === 'entregada');
   const totalVentas = ventasEntregadas.reduce((acc, v) => acc + v.monto, 0);
+  const totalVentasBs = Math.round(ventasEntregadas.reduce((acc, v) => acc + v.monto * v.tasa_cambio, 0));
+
+  const abrirFactura = async (ventaId: number) => {
+    setCargandoFactura(true);
+    try {
+      setFactura(await getFactura(ventaId));
+    } catch {
+      setFactura(null);
+    } finally {
+      setCargandoFactura(false);
+    }
+  };
 
   if (cargando && !dato) return <PageLoader />;
 
@@ -39,13 +55,7 @@ export default function ReportePage() {
         subtitle="Resumen de producción, ventas y efectivo"
         actions={
           <div className="flex items-center gap-2">
-            <input
-              type="date"
-              aria-label="Fecha del reporte"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-            />
+            <DatePicker value={fecha} onChange={setFecha} aria-label="Fecha del reporte" />
             <Button variant="secondary" onClick={() => cargar(fecha)} aria-label="Recargar reporte">
               <RefreshCw className="h-4 w-4" />
             </Button>
@@ -60,8 +70,9 @@ export default function ReportePage() {
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card className="lg:col-span-2">
-            <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-5">
               <Stat label="Ventas entregadas" valor={totalVentas ? formatUsdCents(totalVentas) : '—'} />
+              <Stat label="Ventas Bs" valor={totalVentasBs ? formatUsdCents(totalVentasBs) : '—'} />
               <Stat label="Efectivo US$" valor={formatUsdCents(dato.pagos_efectivo_usd)} />
               <Stat label="Efectivo Bs" valor={formatUsdCents(dato.pagos_efectivo_ves)} />
               <Stat label="Ventas" valor={String(ventasEntregadas.length)} />
@@ -106,6 +117,7 @@ export default function ReportePage() {
                     <Th>Cliente</Th>
                     <Th>Tipo</Th>
                     <Th className="text-right">Monto</Th>
+                    <Th className="text-right">Acciones</Th>
                   </tr>
                 </THead>
                 <tbody>
@@ -117,6 +129,17 @@ export default function ReportePage() {
                         <Badge tone={v.tipo === 'contado' ? 'green' : 'blue'}>{v.tipo}</Badge>
                       </Td>
                       <Td className="text-right">{formatUsdCents(v.monto)}</Td>
+                      <Td className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Ver factura ${v.numero_factura}`}
+                          onClick={() => abrirFactura(v.venta_id)}
+                          disabled={cargandoFactura}
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Button>
+                      </Td>
                     </tr>
                   ))}
                 </tbody>
@@ -125,6 +148,7 @@ export default function ReportePage() {
           </Card>
         </div>
       )}
+      <FacturaModal factura={factura} onClose={() => setFactura(null)} />
     </div>
   );
 }

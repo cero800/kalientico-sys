@@ -97,7 +97,7 @@ pub fn resumen_dia(conn: &Connection, fecha_opt: Option<&str>) -> Result<Resumen
     // Ventas entregadas del día
     let (cond_ventas, fecha_ventas) = filtro_fecha("v.fecha", fecha_opt);
     let sql_ventas = format!(
-        "SELECT v.numero_factura, e.nombre_comercial, v.tipo, v.total, v.estado, v.tasa_cambio
+        "SELECT v.id, v.numero_factura, e.nombre_comercial, v.tipo, v.total, v.estado, v.tasa_cambio
          FROM ventas v JOIN empresas e ON e.id = v.empresa_id
          WHERE {cond_ventas} AND v.estado = 'entregada'
          ORDER BY v.id"
@@ -107,12 +107,13 @@ pub fn resumen_dia(conn: &Connection, fecha_opt: Option<&str>) -> Result<Resumen
             .map_err(|e| e.to_string())?
             .query_map([], |r| {
                 Ok(ResumenDiaVenta {
-                    numero_factura: r.get(0)?,
-                    cliente: r.get(1)?,
-                    tipo: r.get(2)?,
-                    monto: r.get(3)?,
-                    estado: r.get(4)?,
-                    tasa_cambio: r.get(5)?,
+                    venta_id: r.get(0)?,
+                    numero_factura: r.get(1)?,
+                    cliente: r.get(2)?,
+                    tipo: r.get(3)?,
+                    monto: r.get(4)?,
+                    estado: r.get(5)?,
+                    tasa_cambio: r.get(6)?,
                 })
             })
             .map_err(|e| e.to_string())?
@@ -123,12 +124,13 @@ pub fn resumen_dia(conn: &Connection, fecha_opt: Option<&str>) -> Result<Resumen
             .map_err(|e| e.to_string())?
             .query_map(params![fecha_ventas.clone()], |r| {
                 Ok(ResumenDiaVenta {
-                    numero_factura: r.get(0)?,
-                    cliente: r.get(1)?,
-                    tipo: r.get(2)?,
-                    monto: r.get(3)?,
-                    estado: r.get(4)?,
-                    tasa_cambio: r.get(5)?,
+                    venta_id: r.get(0)?,
+                    numero_factura: r.get(1)?,
+                    cliente: r.get(2)?,
+                    tipo: r.get(3)?,
+                    monto: r.get(4)?,
+                    estado: r.get(5)?,
+                    tasa_cambio: r.get(6)?,
                 })
             })
             .map_err(|e| e.to_string())?

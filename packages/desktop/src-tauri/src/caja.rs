@@ -4,8 +4,9 @@
 // el efectivo esperado y la diferencia se calculan por separado. El cierre NO
 // toca el stock (el inventario es acumulativo y persiste entre días).
 
-use crate::types::{Caja, CajaAbrirInput, CajaCerrarInput};
-use crate::validators;
+use crate::factura::{KEY_NEGOCIO_DIRECCION, KEY_NEGOCIO_NOMBRE, KEY_NEGOCIO_RIF, KEY_NEGOCIO_TELEFONO};
+use crate::reporte::{get_config, resumen_dia};
+use crate::types::{Caja, CajaAbrirInput, CajaCerrarInput, CierreAbono, CierreDia};
 use rusqlite::{params, Connection, OptionalExtension};
 
 /// Devuelve la caja abierta actual, si existe.
@@ -85,21 +86,20 @@ pub fn abrir_caja(conn: &Connection, i: &CajaAbrirInput) -> Result<(), String> {
     Ok(())
 }
 
-/// Cierra la caja: recalcula el efectivo de ventas y la diferencia POR MONEDA.
-pub fn cerrar_caja(conn: &Connection, i: &CajaCerrarInput) -> Result<(), String> {
-    let actual = caja_abierta(conn)?;
-    match actual {
+/// Cierra la caja y devuelve el comprobante del día (`CierreDia`) para imprimir.
+/// El efectivo real no se digita: se reconcilia en persona. Al persistir se
+/// asume `efectivo_final = esperado` y `diferencia = 0`.
+pub fn cerrar_caja(conn: &Connection, i: &CajaCerrarInput) -> Result<CierreDia, String> {
+    let actual = match caja_abierta(conn)? {
         None => return Err("No hay caja abierta para cerrar".to_string()),
-        Some(c) if c.id != i.caja_id => {
-            return Err("La caja a cerrar no coincide con la abierta".to_string())
-        }
-        Some(c) if c.operador_id != i.operador_id => {
-            return Err("Solo el operador que abrió la caja puede cerrarla".to_string())
-        }
-        _ => {}
+        Some(c) => c,
+    };
+    if actual.id != i.caja_id {
+        return Err("La caja a cerrar no coincide con la abierta".to_string());
     }
-    validators::validar_monto(i.efectivo_final_usd, "Efectivo final US$")?;
-    validators::validar_monto(i.efectivo_final_ves, "Efectivo final Bs")?;
+    if actual.operador_id != i.operador_id {
+        return Err("Solo el operador que abrió la caja puede cerrarla".to_string());
+    }
     if !i.tasa_cierre.is_finite() || i.tasa_cierre <= 0.0 {
         return Err("La tasa de cambio de cierre debe ser mayor que cero".to_string());
     }
@@ -117,6 +117,74 @@ pub fn cerrar_caja(conn: &Connection, i: &CajaCerrarInput) -> Result<(), String>
         )
         .map_err(|e| e.to_string())?;
 
+    // Abonos en efectivo del día (venta_id nulo) — también entran a la gaveta.
+    let (abono_usd, abono_ves): (i64, i64) = conn
+        .query_row(
+            "SELECT
+                COALESCE(SUM(CASE WHEN moneda = 'usd' THEN monto ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN moneda = 'ves' THEN monto ELSE 0 END), 0)
+             FROM pagos
+             WHERE tipo_pago = 'efectivo' AND date(fecha_pago) = date('now') AND venta_id IS NULL",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Ventas entregadas del día y ventas esperadas (reuso el reporte del día).
+    let resumen = resumen_dia(conn, None)?;
+    let ventas = resumen.ventas;
+    let total_ventas_usd: i64 = ventas.iter().map(|v| v.monto).sum();
+    let total_ventas_bs: i64 = ventas.iter().map(|v| (v.monto as f64 * v.tasa_cambio).round() as i64).sum();
+
+    // Abonos a cuenta del día (todas las monedas y formas de pago).
+    let mut abonos = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.empresa_id, e.nombre_comercial, p.tipo_pago, p.moneda, p.monto, p.tasa_cambio, p.fecha_pago
+                 FROM pagos p JOIN empresas e ON e.id = p.empresa_id
+                 WHERE p.venta_id IS NULL AND date(p.fecha_pago) = date('now')
+                 ORDER BY p.id",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(CierreAbono {
+                    empresa_id: r.get(0)?,
+                    cliente: r.get(1)?,
+                    tipo_pago: r.get(2)?,
+                    moneda: r.get(3)?,
+                    monto: r.get(4)?,
+                    tasa_cambio: r.get(5)?,
+                    fecha_pago: r.get(6)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        for ab in rows {
+            abonos.push(ab.map_err(|e| e.to_string())?);
+        }
+    }
+    let total_abonos_usd: i64 = abonos
+        .iter()
+        .map(|a| {
+            if a.moneda == "usd" {
+                a.monto
+            } else {
+                (a.monto as f64 / a.tasa_cambio).round() as i64
+            }
+        })
+        .sum();
+    let total_abonos_bs: i64 = abonos
+        .iter()
+        .map(|a| {
+            if a.moneda == "ves" {
+                a.monto
+            } else {
+                (a.monto as f64 * a.tasa_cambio).round() as i64
+            }
+        })
+        .sum();
+
     // Recalcular lo esperado con la última apertura (no usar lo ya escrito).
     let (inicial_usd, inicial_ves): (i64, i64) = conn
         .query_row(
@@ -128,8 +196,6 @@ pub fn cerrar_caja(conn: &Connection, i: &CajaCerrarInput) -> Result<(), String>
 
     let esperado_usd = inicial_usd + ventas_usd;
     let esperado_ves = inicial_ves + ventas_ves;
-    let diferencia_usd = i.efectivo_final_usd - esperado_usd;
-    let diferencia_ves = i.efectivo_final_ves - esperado_ves;
     let tasa_cierre = i.tasa_cierre;
 
     conn.execute(
@@ -143,18 +209,44 @@ pub fn cerrar_caja(conn: &Connection, i: &CajaCerrarInput) -> Result<(), String>
         params![
             ventas_usd,
             ventas_ves,
-            i.efectivo_final_usd,
-            i.efectivo_final_ves,
             esperado_usd,
             esperado_ves,
-            diferencia_usd,
-            diferencia_ves,
+            esperado_usd,
+            esperado_ves,
+            0,
+            0,
             tasa_cierre,
             i.caja_id,
         ],
     )
     .map_err(|e| e.to_string())?;
-    Ok(())
+
+    let negocio = |clave: &str| get_config(conn, clave).unwrap_or(None).unwrap_or_default();
+
+    Ok(CierreDia {
+        caja_id: i.caja_id,
+        fecha: actual.fecha,
+        operador_nombre: actual.operador_nombre,
+        negocio_nombre: negocio(KEY_NEGOCIO_NOMBRE),
+        negocio_rif: negocio(KEY_NEGOCIO_RIF),
+        negocio_telefono: negocio(KEY_NEGOCIO_TELEFONO),
+        negocio_direccion: negocio(KEY_NEGOCIO_DIRECCION),
+        efectivo_inicial_usd: inicial_usd,
+        efectivo_inicial_ves: inicial_ves,
+        efectivo_ventas_usd: ventas_usd,
+        efectivo_ventas_ves: ventas_ves,
+        abonos_efectivo_usd: abono_usd,
+        abonos_efectivo_ves: abono_ves,
+        efectivo_esperado_usd: esperado_usd,
+        efectivo_esperado_ves: esperado_ves,
+        ventas,
+        abonos,
+        total_ventas_usd,
+        total_ventas_bs,
+        total_abonos_usd,
+        total_abonos_bs,
+        tasa_cierre,
+    })
 }
 
 #[cfg(test)]
@@ -232,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn cerrar_deriva_diferencia_por_moneda() {
+    fn cerrar_cierra_con_esperado_del_dia_y_sin_diferencia() {
         let mut conn = conn();
         tasa(&conn, 36.85);
         let uid = usuario(&conn);
@@ -246,14 +338,12 @@ mod tests {
         crate::ventas::crear_venta(&mut conn, &venta_ves(eid, pid, uid)).unwrap();
 
         let caja_id = caja_abierta(&conn).unwrap().unwrap().id;
-        cerrar_caja(
+        let cierre = cerrar_caja(
             &conn,
             &CajaCerrarInput {
                 caja_id,
                 operador_id: uid,
-                efectivo_final_usd: 10_00, // esperado 0+10 = 10 → dif 0
-                efectivo_final_ves: 36_850, // esperado 0+368.50 → dif 0
-                tasa_cierre: 37.5,          // se congela la tasa pasada, no la global
+                tasa_cierre: 37.5, // se congela la tasa pasada, no la global
             },
         )
         .unwrap();
@@ -283,6 +373,78 @@ mod tests {
         assert_eq!(row.3, 0);
         assert_eq!(row.4, "cerrada");
         assert_eq!(row.5, 37.5);
+
+        // El comprobante trae las ventas del día con totales en US$ y Bs.
+        assert_eq!(cierre.operador_nombre, "Test");
+        assert_eq!(cierre.efectivo_inicial_usd, 0);
+        assert_eq!(cierre.efectivo_ventas_usd, 10_00);
+        assert_eq!(cierre.efectivo_ventas_ves, 36_850);
+        assert_eq!(cierre.efectivo_esperado_usd, 10_00);
+        assert_eq!(cierre.ventas.len(), 2);
+        assert_eq!(cierre.total_ventas_usd, 20_00);
+        assert_eq!(cierre.total_ventas_bs, 73_700); // 20 * 36.85
+        assert_eq!(cierre.abonos.len(), 0);
+        assert_eq!(cierre.total_abonos_usd, 0);
+        assert_eq!(cierre.tasa_cierre, 37.5);
+    }
+
+    #[test]
+    fn cierre_incluye_abonos_del_dia_y_datos_del_negocio() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        let pid = producto(&conn, 10_00);
+        stock(&conn, pid, 20.0);
+
+        crate::ventas::crear_venta(&mut conn, &venta_usd(eid, pid, uid)).unwrap();
+        crate::pagos::registrar_abono(
+            &conn,
+            &crate::types::AbonoInput {
+                empresa_id: eid,
+                monto: 36_850, // Bs 368.50 en efectivo (= $10)
+                tipo_pago: "efectivo".into(),
+                moneda: "ves".into(),
+                numero_referencia: None,
+                operador_id: uid,
+            },
+        )
+        .unwrap();
+        crate::pagos::registrar_abono(
+            &conn,
+            &crate::types::AbonoInput {
+                empresa_id: eid,
+                monto: 18_425, // Bs 184.25 = $5 en pago móvil
+                tipo_pago: "pago_movil".into(),
+                moneda: "ves".into(),
+                numero_referencia: Some("123".into()),
+                operador_id: uid,
+            },
+        )
+        .unwrap();
+
+        crate::reporte::set_config(&conn, crate::factura::KEY_NEGOCIO_NOMBRE, "Panadería El Trigal").unwrap();
+
+        let caja_id = caja_abierta(&conn).unwrap().unwrap().id;
+        let cierre = cerrar_caja(
+            &conn,
+            &CajaCerrarInput {
+                caja_id,
+                operador_id: uid,
+                tasa_cierre: 36.85,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(cierre.negocio_nombre, "Panadería El Trigal");
+        assert_eq!(cierre.abonos.len(), 2);
+        assert_eq!(cierre.abonos[0].cliente, "Pan S.A.");
+        assert_eq!(cierre.abonos[0].tipo_pago, "efectivo");
+        assert_eq!(cierre.total_abonos_usd, 15_00); // $10 (Bs) + $5 (US$)
+        assert_eq!(cierre.total_abonos_bs, 55_275); // Bs 368.50 + $5*36.85 = Bs 552.75
+        assert_eq!(cierre.abonos_efectivo_usd, 0);
+        assert_eq!(cierre.abonos_efectivo_ves, 36_850);
     }
 
     #[test]
@@ -303,8 +465,6 @@ mod tests {
             &CajaCerrarInput {
                 caja_id: caja1,
                 operador_id: uid,
-                efectivo_final_usd: 10_00,
-                efectivo_final_ves: 36_850,
                 tasa_cierre: 37.0,
             },
         )
@@ -324,8 +484,6 @@ mod tests {
             &CajaCerrarInput {
                 caja_id: caja2.id,
                 operador_id: uid,
-                efectivo_final_usd: 10_00,
-                efectivo_final_ves: 36_850,
                 tasa_cierre: 37.1,
             },
         )
@@ -346,8 +504,6 @@ mod tests {
             &CajaCerrarInput {
                 caja_id: caja_id + 999,
                 operador_id: uid_a,
-                efectivo_final_usd: 0,
-                efectivo_final_ves: 0,
                 tasa_cierre: 36.85,
             },
         )
@@ -359,8 +515,6 @@ mod tests {
             &CajaCerrarInput {
                 caja_id,
                 operador_id: uid_b,
-                efectivo_final_usd: 0,
-                efectivo_final_ves: 0,
                 tasa_cierre: 36.85,
             },
         )
