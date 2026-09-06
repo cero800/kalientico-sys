@@ -240,9 +240,11 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
     if !tiene_pin {
         conn.execute("ALTER TABLE usuarios ADD COLUMN pin TEXT", [])?;
     }
-    // El admin pasa a tener PIN por defecto (1234) si no lo tenía.
+    // El admin pasa a tener PIN por defecto (1234) si no lo tenía. Corre siempre:
+    // es idempotente y auto-cura bases que quedaron a medio migrar (columna `pin`
+    // ya agregada pero sin valor).
     conn.execute(
-        "UPDATE usuarios SET pin = ?2 WHERE rol = 'admin' AND (pin IS NULL OR pin = '')",
+        "UPDATE usuarios SET pin = ?1 WHERE rol = 'admin' AND (pin IS NULL OR pin = '')",
         rusqlite::params!["1234"],
     )?;
     Ok(())
@@ -288,4 +290,44 @@ pub fn test_conn() -> Connection {
         .expect("enable fk");
     conn.execute_batch(SCHEMA).expect("aplicar esquema");
     conn
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regresión v1.0.2: una base con el esquema viejo (sin columna `pin`) debía
+    /// migrar sin error. Antes fallaba con "Wrong number of parameters passed to
+    /// query. Got 1, needed 2" por un `?2` con un solo parámetro enlazado.
+    #[test]
+    fn migra_base_antigua_sin_pin() {
+        let conn = Connection::open_in_memory().expect("abrir bd en memoria");
+        conn.execute_batch(
+            "CREATE TABLE usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                rol TEXT NOT NULL DEFAULT 'cajero',
+                activo INTEGER NOT NULL DEFAULT 1,
+                creado_en DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO usuarios (nombre, rol) VALUES ('Administrador', 'admin');",
+        )
+        .expect("crear esquema viejo");
+
+        apply_migrations(&conn).expect("la migración v3 no debe fallar");
+
+        let tiene_pin: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('usuarios') WHERE name = 'pin'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("consultar columnas");
+        assert_eq!(tiene_pin, 1, "se debe agregar la columna pin");
+
+        let pin: String = conn
+            .query_row("SELECT pin FROM usuarios WHERE rol='admin'", [], |r| r.get(0))
+            .expect("leer pin del admin");
+        assert_eq!(pin, "1234", "el admin debe quedar con PIN por defecto");
+    }
 }
