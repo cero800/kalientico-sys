@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, Settings2, Trash2, Users } from 'lucide-react';
-import type { Empresa, EmpresaInput, Producto } from '@panaderia/core';
-import { crearEmpresa, eliminarEmpresa, listarEmpresas, listarPreciosCliente, listarProductos, setPrecioCliente } from '../services/db';
+import { Plus, Trash2, Users } from 'lucide-react';
+import type { Empresa, EmpresaInput } from '@panaderia/core';
+import { crearEmpresa, eliminarEmpresa, listarEmpresas } from '../services/db';
 import { formatUsdCents, parseCentsInput } from '../lib/format';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -24,22 +24,15 @@ function empresaVacia(): EmpresaInput {
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Empresa[]>([]);
-  const [productos, setProductos] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [modalNuevo, setModalNuevo] = useState(false);
   const [form, setForm] = useState<EmpresaInput>(empresaVacia());
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
-  const [preciosDe, setPreciosDe] = useState<Empresa | null>(null);
-  const [precios, setPrecios] = useState<Record<number, string>>({});
-  const [existentes, setExistentes] = useState<Record<number, number>>({});
 
   const cargar = () => listarEmpresas().then(setClientes).finally(() => setCargando(false));
   useEffect(() => {
     cargar();
-    listarProductos()
-      .then((ps) => setProductos(ps.filter((p) => p.activo)))
-      .catch(() => {});
   }, []);
 
   const crear = async () => {
@@ -68,43 +61,6 @@ export default function ClientesPage() {
       cargar();
     } catch (e) {
       window.alert(String(e));
-    }
-  };
-
-  const abrirPrecios = async (c: Empresa) => {
-    setPreciosDe(c);
-    setPrecios({});
-    try {
-      const existentes = await listarPreciosCliente(c.id);
-      setExistentes(Object.fromEntries(existentes.map((p) => [p.producto_id, p.precio_especial])));
-      setPrecios(Object.fromEntries(existentes.map((p) => [p.producto_id, formatUsdCents(p.precio_especial)])));
-    } catch {
-      setExistentes({});
-    }
-  };
-
-  const guardarPrecios = async () => {
-    if (!preciosDe) return;
-    setGuardando(true);
-    setError(null);
-    try {
-      const operaciones: Promise<unknown>[] = [];
-      for (const p of productos) {
-        const texto = precios[p.id]?.trim();
-        if (!texto) continue;
-        const valor = parseCentsInput(texto, 'usd');
-        if (valor === null || valor === p.precio_base) continue;
-        if (existentes[p.id] === valor) continue;
-        operaciones.push(
-          setPrecioCliente({ empresa_id: preciosDe.id, producto_id: p.id, precio_especial: valor }),
-        );
-      }
-      await Promise.all(operaciones);
-      setPreciosDe(null);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setGuardando(false);
     }
   };
 
@@ -154,9 +110,6 @@ export default function ClientesPage() {
                     </Td>
                     <Td className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" aria-label={`Precios de ${c.nombre_comercial}`} onClick={() => abrirPrecios(c)}>
-                          <Settings2 className="h-4 w-4" />
-                        </Button>
                         <Button variant="ghost" size="sm" aria-label={`Eliminar ${c.nombre_comercial}`} onClick={() => eliminar(c)}>
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
@@ -197,44 +150,6 @@ export default function ClientesPage() {
             value={form.limite_credito ? formatUsdCents(form.limite_credito) : ''}
             onChange={(e) => setForm({ ...form, limite_credito: parseCentsInput(e.target.value, 'usd') ?? 0 })}
           />
-        </div>
-      </Modal>
-
-      {/* Precios especiales por cliente */}
-      <Modal
-        open={preciosDe != null}
-        title={`Precios especiales — ${preciosDe?.nombre_comercial ?? ''}`}
-        onClose={() => setPreciosDe(null)}
-        footer={<>
-          <Button variant="secondary" onClick={() => setPreciosDe(null)}>Cancelar</Button>
-          <Button onClick={guardarPrecios} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Button>
-        </>}
-      >
-        <div className="space-y-3">
-          {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-          <p className="text-xs text-gray-500">Deja vacío para usar el precio base. Los cambios aplican desde el punto de venta.</p>
-          {productos.length === 0 ? (
-            <p className="text-sm text-gray-500">No hay productos activos.</p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {productos.map((p) => (
-                <li key={p.id} className="flex items-center gap-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-gray-800">{p.nombre}</p>
-                    <p className="text-xs text-gray-400">Base: {formatUsdCents(p.precio_base)}</p>
-                  </div>
-                  <Input
-                    aria-label={`Precio especial de ${p.nombre}`}
-                    prefix="$"
-                    value={precios[p.id] ?? ''}
-                    placeholder={formatUsdCents(p.precio_base)}
-                    className="w-32"
-                    onChange={(e) => setPrecios({ ...precios, [p.id]: e.target.value })}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       </Modal>
     </div>

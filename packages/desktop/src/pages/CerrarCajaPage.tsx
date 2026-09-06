@@ -68,27 +68,9 @@ export default function CerrarCajaPage() {
     <div>
       <div className="mx-auto max-w-2xl">
         <Card>
-          <CardHeader title="Cerrar caja" subtitle={`Caja #${caja?.id ?? '…'} · ${operador?.nombre}`} />
+          <CardHeader title="Cerrar caja" subtitle={operador?.nombre} />
           <div className="space-y-4 p-5">
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              <div className="rounded-lg bg-gray-50 p-3">
-                <p className="text-xs text-gray-500">Efectivo inicial</p>
-                <p className="font-bold text-gray-900">{formatUsdCents(caja?.efectivo_inicial_usd ?? 0)}</p>
-                <p className="text-xs text-gray-600">{formatVesCents(caja?.efectivo_inicial_ves ?? 0)}</p>
-              </div>
-              <div className="rounded-lg bg-gray-50 p-3">
-                <p className="text-xs text-gray-500">Ventas efectivo</p>
-                <p className="font-semibold text-gray-800">{formatUsdCents(caja?.efectivo_ventas_usd ?? 0)}</p>
-                <p className="text-xs text-gray-600">{formatVesCents(caja?.efectivo_ventas_ves ?? 0)}</p>
-              </div>
-              <div className="rounded-lg bg-amber-50 p-3">
-                <p className="text-xs text-amber-700">Esperado</p>
-                <p className="font-bold text-amber-900">{formatUsdCents(caja?.efectivo_esperado_usd ?? 0)}</p>
-                <p className="text-xs text-amber-800">{formatVesCents(caja?.efectivo_esperado_ves ?? 0)}</p>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100 pt-4">
+            <div>
               <h3 className="mb-2 text-sm font-semibold text-gray-700">Cuenta del día</h3>
               {!resumen ? (
                 <p className="text-sm text-gray-500">Cargando ventas del día…</p>

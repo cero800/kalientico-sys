@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, X } from 'lucide-react';
+import { FileDown, Printer, X } from 'lucide-react';
 import type { Factura } from '@panaderia/core';
 import { TIPO_PAGO_LABELS } from '@panaderia/core';
 import { formatCents, formatUsdCents } from '../../lib/format';
+import { facturaPdfB64, nombreArchivoFactura } from '../../lib/facturaPdf';
+import { guardarFacturaPdf } from '../../services/db';
 import { Button } from './Button';
 
 interface Props {
@@ -19,6 +21,35 @@ function fechaLegible(fecha: string): string {
 
 export function FacturaModal({ factura, onClose }: Props) {
   const [imprimiendo, setImprimiendo] = useState(false);
+  const [guardandoPdf, setGuardandoPdf] = useState(false);
+  const [rutaPdf, setRutaPdf] = useState<string | null>(null);
+  const [errorPdf, setErrorPdf] = useState<string | null>(null);
+  const guardadas = useRef<Set<number>>(new Set());
+
+  const guardarPdf = async () => {
+    if (!factura) return;
+    setGuardandoPdf(true);
+    setErrorPdf(null);
+    try {
+      const ruta = await guardarFacturaPdf(nombreArchivoFactura(factura), facturaPdfB64(factura));
+      setRutaPdf(ruta);
+      guardadas.current.add(factura.venta_id);
+    } catch (e) {
+      setErrorPdf(String(e));
+    } finally {
+      setGuardandoPdf(false);
+    }
+  };
+
+  // Guardado automático la primera vez que se abre cada factura.
+  useEffect(() => {
+    setRutaPdf(null);
+    setErrorPdf(null);
+    if (factura && !guardadas.current.has(factura.venta_id)) {
+      guardarPdf();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [factura?.venta_id]);
 
   useEffect(() => {
     setImprimiendo(false);
@@ -55,8 +86,17 @@ export function FacturaModal({ factura, onClose }: Props) {
           <div>
             <h2 className="text-sm font-semibold text-gray-900">Factura</h2>
             <p className="text-xs text-gray-500">Venta #{factura.venta_id} · {factura.fecha.slice(0, 10)}</p>
+            {rutaPdf && (
+              <p className="mt-0.5 text-xs text-emerald-600">PDF guardado en {rutaPdf}</p>
+            )}
+            {errorPdf && (
+              <p className="mt-0.5 text-xs text-red-600">No se pudo guardar el PDF: {errorPdf}</p>
+            )}
           </div>
           <div className="flex gap-2">
+            <Button onClick={guardarPdf} disabled={guardandoPdf}>
+              <FileDown className="h-4 w-4" /> {guardandoPdf ? 'Guardando…' : 'Guardar PDF'}
+            </Button>
             <Button onClick={imprimir} disabled={imprimiendo}>
               <Printer className="h-4 w-4" /> Imprimir
             </Button>

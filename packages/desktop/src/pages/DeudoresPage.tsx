@@ -212,12 +212,12 @@ export default function DeudoresPage() {
             <div>
               <p className="text-xs text-gray-500">Debe (saldo pendiente)</p>
               <p className="font-bold text-red-600">{formatUsdCents(saldoUsd)}</p>
-              {aBs(saldoUsd) !== null && <p className="text-xs text-gray-600">{formatVesCents(aBs(saldoUsd)!)}</p>}
+              {aBs(saldoUsd) !== null && <p className="font-semibold text-emerald-700">{formatVesCents(aBs(saldoUsd)!)}</p>}
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">Queda por pagar</p>
               <p className="font-bold text-emerald-700">{formatUsdCents(quedaUsd)}</p>
-              {aBs(quedaUsd) !== null && <p className="text-xs text-gray-600">{formatVesCents(aBs(quedaUsd)!)}</p>}
+              {aBs(quedaUsd) !== null && <p className="font-semibold text-gray-600">{formatVesCents(aBs(quedaUsd)!)}</p>}
             </div>
           </div>
           <div className="flex gap-3">

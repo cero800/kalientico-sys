@@ -232,6 +232,54 @@ fn obtener_factura(state: State<'_, Db>, venta_id: i64) -> Result<types::Factura
     factura::factura_venta(&*lock(&state)?, venta_id)
 }
 
+/// Guarda un PDF en `Documentos/kalientico/facturas/` (o en los datos de la app
+/// si no hay carpeta Documentos) y devuelve la ruta completa del archivo.
+#[tauri::command]
+fn guardar_factura_pdf(
+    app: tauri::AppHandle,
+    nombre_archivo: String,
+    contenido_b64: String,
+) -> Result<String, String> {
+    use base64::engine::general_purpose::STANDARD as B64;
+    use base64::Engine as _;
+    use std::io::Write;
+
+    let bytes = B64
+        .decode(contenido_b64.trim())
+        .map_err(|e| format!("Contenido PDF inválido: {e}"))?;
+
+    // Saneamiento del nombre: solo alfanuméricos, guiones, guion bajo y punto.
+    let nombre: String = nombre_archivo
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if nombre.trim().is_empty() {
+        return Err("Nombre de archivo vacío".to_string());
+    }
+
+    let base = app
+        .path()
+        .document_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(|e| format!("No se pudo obtener el directorio de documentos: {e}"))?;
+    let dir = base.join("kalientico").join("facturas");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("No se pudo crear la carpeta de facturas: {e}"))?;
+    let ruta = dir.join(nombre);
+    let mut archivo = std::fs::File::create(&ruta)
+        .map_err(|e| format!("No se pudo crear el archivo: {e}"))?;
+    archivo
+        .write_all(&bytes)
+        .map_err(|e| format!("No se pudo escribir el archivo: {e}"))?;
+    Ok(ruta.to_string_lossy().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -272,6 +320,7 @@ pub fn run() {
             get_config,
             set_config,
             obtener_factura,
+            guardar_factura_pdf,
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar la app Tauri");

@@ -42,8 +42,8 @@ export default function Shell() {
     <div className="flex h-screen bg-gray-100">
       <aside className="flex w-56 shrink-0 flex-col border-r border-gray-200 bg-white">
         <div className="border-b border-gray-100 px-4 py-4">
-          <p className="text-sm font-bold text-gray-900">Kalientico POS</p>
-          <p className="mt-0.5 text-xs text-gray-500">Panadería</p>
+          <p className="text-sm font-bold text-gray-900">Kalientico</p>
+          <p className="mt-0.5 text-xs text-gray-500">Panificadora</p>
         </div>
 
         <nav className="flex-1 space-y-1 px-2 py-3">
@@ -82,9 +82,7 @@ export default function Shell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4">
           <div className="flex items-center gap-3 text-sm text-gray-500">
-            <span>
-              Caja #{caja?.id} · {caja?.fecha?.slice(0, 10) ?? '—'}
-            </span>
+            <span>{caja?.fecha?.slice(0, 10) ?? '—'}</span>
           </div>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-gray-500">

@@ -221,16 +221,22 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
               <strong className="text-red-600">-{formatUsdCents(descuentoCents)}</strong>
             </div>
           ) : null}
-          <div className="flex justify-between border-t border-gray-200 pt-1.5">
+          <div className="flex justify-between border-t border-gray-200 pt-2">
             <span className="font-semibold text-gray-800">Total a pagar</span>
-            <strong className="text-lg">{formatUsdCents(totalConDescuento)}</strong>
+            <span className="text-right">
+              <strong className="block text-lg">{formatUsdCents(totalConDescuento)}</strong>
+              <strong className="block text-sm text-emerald-700">{formatVesCents(Math.round(totalConDescuento * tasa))}</strong>
+            </span>
           </div>
 
           {esContado && (
             <>
               <div className="flex justify-between">
                 <span className="text-gray-600">Pagado</span>
-                <strong>{formatUsdCents(validacion.pagadoUsd)}</strong>
+                <span className="text-right">
+                  <strong className="block">{formatUsdCents(validacion.pagadoUsd)}</strong>
+                  <span className="block text-xs text-gray-500">{formatVesCents(Math.round(validacion.pagadoUsd * tasa))}</span>
+                </span>
               </div>
               {!validacion.valido && validacion.faltanteUsd > 0 && (
                 <p className="text-xs text-red-600">

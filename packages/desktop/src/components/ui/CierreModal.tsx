@@ -53,7 +53,7 @@ export function CierreModal({ cierre, onClose }: Props) {
         <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-3">
           <div>
             <h2 className="text-sm font-semibold text-gray-900">Cierre de caja</h2>
-            <p className="text-xs text-gray-500">Caja #{cierre.caja_id} · {cierre.fecha.slice(0, 10)}</p>
+            <p className="text-xs text-gray-500">{cierre.fecha.slice(0, 10)}</p>
           </div>
           <div className="flex gap-2">
             <Button onClick={imprimir} disabled={imprimiendo}>
@@ -77,11 +77,6 @@ export function CierreModal({ cierre, onClose }: Props) {
               {cierre.negocio_direccion && <p className="text-xs">{cierre.negocio_direccion}</p>}
             </header>
 
-            <div className="border-b border-dashed border-gray-400 py-2 text-center">
-              <p className="text-[11px] uppercase text-gray-500">Cierre de caja N°</p>
-              <p className="font-mono text-base font-bold">{String(cierre.caja_id).padStart(4, '0')}</p>
-            </div>
-
             <div className="flex justify-between gap-3 border-b border-dashed border-gray-400 py-2">
               <div>
                 <p className="text-[11px] uppercase text-gray-500">Operador</p>
@@ -90,25 +85,6 @@ export function CierreModal({ cierre, onClose }: Props) {
               <div className="text-right">
                 <p className="text-[11px] uppercase text-gray-500">Fecha</p>
                 <p>{fechaLegible(cierre.fecha)}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-b border-dashed border-gray-400 py-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Efectivo inicial</span>
-                <span className="font-medium">{formatUsdCents(cierre.efectivo_inicial_usd)} / {formatVesCents(cierre.efectivo_inicial_ves)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Ventas efectivo</span>
-                <span className="font-medium">{formatUsdCents(cierre.efectivo_ventas_usd)} / {formatVesCents(cierre.efectivo_ventas_ves)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Abonos efectivo</span>
-                <span className="font-medium">{formatUsdCents(cierre.abonos_efectivo_usd)} / {formatVesCents(cierre.abonos_efectivo_ves)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Esperado</span>
-                <span className="font-bold">{formatUsdCents(cierre.efectivo_esperado_usd)} / {formatVesCents(cierre.efectivo_esperado_ves)}</span>
               </div>
             </div>
 

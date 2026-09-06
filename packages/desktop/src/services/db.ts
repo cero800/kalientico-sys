@@ -113,6 +113,10 @@ export const setConfig = (clave: string, valor: string) => invoke('set_config', 
 // Factura imprimible de una venta
 export const getFactura = (venta_id: number) => invoke<Factura>('obtener_factura', { ventaId: venta_id });
 
+// Guarda el PDF de la factura en Documentos/kalientico/facturas/ y devuelve la ruta.
+export const guardarFacturaPdf = (nombre_archivo: string, contenido_b64: string) =>
+  invoke<string>('guardar_factura_pdf', { nombreArchivo: nombre_archivo, contenidoB64: contenido_b64 });
+
 // Tasa de cambio (Bs por 1 US$) — conveniencia sobre get/setConfig.
 export const getTasaCambio = async (): Promise<number> => {
   const valor = await getConfig(TASA_CAMBIO_KEY);

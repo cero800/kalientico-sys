@@ -91,7 +91,7 @@ beforeEach(() => {
 });
 
 describe('CerrarCajaPage', () => {
-  it('muestra la cuenta del día con el esperado, sin arqueo manual', async () => {
+  it('muestra solo la cuenta del día para el cierre, sin arqueo', async () => {
     renderPagina();
     expect(await screen.findByText('Cuenta del día')).toBeInTheDocument();
     expect(screen.getByText(/#0001/)).toBeInTheDocument();
