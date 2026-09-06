@@ -83,7 +83,7 @@ export const listarUsuarios = () => invoke<Usuario[]>('listar_usuarios');
 export const crearUsuario = (usuario: UsuarioInput) => invoke<number>('crear_usuario', { usuario });
 
 export const verificarPin = (usuario_id: number, pin: string) =>
-  invoke<boolean>('verificar_pin', { usuario_id, pin });
+  invoke<boolean>('verificar_pin', { usuarioId: usuario_id, pin });
 
 export const cambiarPin = (usuario_id: number, pin_actual: string, pin_nuevo: string) =>
   invoke<void>('cambiar_pin', { usuario_id, pin_actual, pin_nuevo });
@@ -105,7 +105,7 @@ export const listarBackups = () => invoke<BackupItem[]>('listar_backups');
 export const crearBackup = () => invoke<BackupItem>('crear_backup');
 
 export const eliminarBackup = (nombre_archivo: string) =>
-  invoke<void>('eliminar_backup', { nombre_archivo });
+  invoke<void>('eliminar_backup', { nombreArchivo: nombre_archivo });
 // Inventario
 export const listarStock = () => invoke<StockItem[]>('listar_stock');
 export const registrarProduccion = (args: { producto_id: number; cantidad: number; costo_unitario: number; operador_id: number; fecha: string }) =>
