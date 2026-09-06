@@ -14,7 +14,7 @@ jobs:
     name: Escritorio (Linux)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Dependencias del sistema (Tauri v2)
         run: |
