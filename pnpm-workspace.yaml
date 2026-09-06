@@ -1,8 +1,6 @@
 packages:
   - 'packages/*'
 
-onlyBuiltDependencies:
-  - core-js
-  - esbuild
-  - electron
-  - '@tauri-apps/cli'
+allowBuilds:
+  core-js: true
+  esbuild: true
