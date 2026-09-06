@@ -1,6 +1,6 @@
 [package]
 name = "panaderia-desktop"
-version = "1.0.8"
+version = "1.0.9"
 description = "Sistema POS - Panadería"
 authors = ["you"]
 edition = "2021"
