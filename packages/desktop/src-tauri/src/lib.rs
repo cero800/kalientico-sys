@@ -410,8 +410,31 @@ fn guardar_reporte_excel(
     Ok(ruta.to_string_lossy().to_string())
 }
 
+/// Registra el mensaje de cualquier `panic` del lado Rust en un archivo de
+/// texto, porque el release oculta la consola y los crashes se quedan sin
+/// pista. La ruta es `%TEMP%\kalientico-panic.log` (Windows) o `/tmp/...`.
+fn setup_panic_log() {
+    use std::io::Write;
+    let ruta = std::env::temp_dir().join("kalientico-panic.log");
+    std::panic::set_hook(Box::new(move |info| {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let linea = format!("=== {ts} ===\n{info}\n");
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&ruta)
+        {
+            let _ = writeln!(f, "{linea}");
+        }
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    setup_panic_log();
     tauri::Builder::default()
         .setup(|app| {
             let conn = open_database(app)?;
