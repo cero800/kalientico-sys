@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CircleUserRound } from 'lucide-react';
 import type { Usuario } from '@panaderia/core';
 import { listarUsuarios, necesitaConfiguracion, verificarPin } from '../services/db';
+import { trazar } from '../services/logging';
 import { useSesion } from '../store/sesion';
 import { Card } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
@@ -46,8 +47,10 @@ export default function LoginPage() {
     setError(null);
     try {
       const ok = await verificarPin(seleccionado.id, pin);
+      trazar('login', `PIN valido=${ok}`);
       if (ok) {
         await completarLogin(seleccionado);
+        trazar('login', 'navegando a /');
       } else {
         setPin('');
         setError('PIN incorrecto. Intenta de nuevo.');

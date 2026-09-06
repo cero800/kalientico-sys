@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { abrirCaja, getTasaCambio, setTasaCambio } from '../services/db';
+import { trazar } from '../services/logging';
 import { useSesion } from '../store/sesion';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
@@ -19,8 +20,13 @@ export default function AbrirCajaPage() {
   const [campoError, setCampoError] = useState<string | null>(null);
 
   useEffect(() => {
+    trazar('pagina', 'AbrirCajaPage montada');
     getTasaCambio()
-      .then((t) => setTasa(String(t)))
+      .then((t) => {
+        trazar('pagina', `tasa=${t}`);
+        setTasa(String(t));
+      })
+      .catch((e) => trazar('pagina', `error tasa: ${String(e)}`))
       .finally(() => setTasaCargada(true));
   }, []);
 

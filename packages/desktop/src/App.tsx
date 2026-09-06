@@ -5,6 +5,7 @@ import Shell from './components/Shell';
 import ErrorBoundary from './components/ErrorBoundary';
 import OverlayErrores from './components/OverlayErrores';
 import { useSesion } from './store/sesion';
+import { trazar } from './services/logging';
 import { PageLoader } from './components/ui/Spinner';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -21,7 +22,8 @@ const ConfiguracionPage = lazy(() => import('./pages/ConfiguracionPage'));
 
 export default function App() {
   useEffect(() => {
-    void useSesion.getState().refrescar();
+    trazar('app', `montaje, path=${location.pathname}`);
+    void useSesion.getState().refrescar().then(() => trazar('app', 'refrescar listo'));
   }, []);
 
   return (

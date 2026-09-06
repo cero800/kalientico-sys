@@ -1,5 +1,6 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useSesion } from '../store/sesion';
+import { trazar } from '../services/logging';
 import { PageLoader } from './ui/Spinner';
 
 /** Requiere operador elegido; si la sesión aún no se inicializa, muestra carga. */
@@ -15,7 +16,11 @@ export function RequiereSesion() {
 /** Requiere caja abierta (inicio de turno). */
 export function RequiereCaja() {
   const caja = useSesion((s) => s.caja);
-  if (!caja) return <Navigate to="/abrir-caja" replace />;
+  const ubicacion = useLocation();
+  if (!caja) {
+    trazar('ruta', `RequiereCaja -> /abrir-caja desde ${ubicacion.pathname}`);
+    return <Navigate to="/abrir-caja" replace />;
+  }
   return <Outlet />;
 }
 

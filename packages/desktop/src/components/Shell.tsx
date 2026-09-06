@@ -1,5 +1,5 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, type ReactNode } from 'react';
 import {
   ShoppingCart,
   Package,
@@ -12,6 +12,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useSesion } from '../store/sesion';
+import { trazar } from '../services/logging';
 import { cn } from '../lib/cn';
 import { formatVesCents } from '../lib/format';
 import { Button } from './ui/Button';
@@ -34,6 +35,11 @@ export default function Shell() {
   const operador = useSesion((s) => s.operador);
   const caja = useSesion((s) => s.caja);
   const logout = useSesion((s) => s.logout);
+  const ubicacion = useLocation();
+
+  useEffect(() => {
+    trazar('ruta', `Shell en ${ubicacion.pathname}`);
+  }, [ubicacion.pathname]);
 
   const salir = () => {
     logout();

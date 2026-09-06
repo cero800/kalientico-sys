@@ -374,6 +374,36 @@ fn log_error(app: tauri::AppHandle, origen: String, mensaje: String) -> Result<(
     Ok(())
 }
 
+/// Registra un evento de la interfaz (montaje, login, navegación) en
+/// `app_data/traza.log` para trazar en qué punto se queda colgada la app.
+#[tauri::command]
+fn log_evento(app: tauri::AppHandle, origen: String, mensaje: String) -> Result<(), String> {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("No se pudo obtener la carpeta de datos: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let ruta = dir.join("traza.log");
+
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let mut archivo = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&ruta)
+        .map_err(|e| format!("No se pudo abrir la traza: {e}"))?;
+    let linea = format!("{ts} [{origen}] {mensaje}\n");
+    archivo
+        .write_all(linea.as_bytes())
+        .map_err(|e| format!("No se pudo escribir la traza: {e}"))?;
+    Ok(())
+}
+
 /// Guarda un reporte XML/XLSX en `Documentos/kalientico/excel/` (o app-data si
 /// no hay carpeta Documentos) y devuelve la ruta completa del archivo.
 #[tauri::command]
@@ -479,6 +509,7 @@ pub fn run() {
             listar_backups,
             eliminar_backup,
             log_error,
+            log_evento,
             listar_stock,
             registrar_produccion,
             registrar_merma,

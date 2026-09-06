@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Caja, Usuario } from '@panaderia/core';
 import { cajaAbierta, getTasaCambio } from '../services/db';
+import { trazar } from '../services/logging';
 
 interface SesionState {
   operador: Usuario | null;
@@ -23,8 +24,10 @@ export const useSesion = create<SesionState>((set) => ({
 
   /** Inicia turno y re-sincroniza la realidad del backend (caja abierta + tasa). */
   login: async (usuario) => {
+    trazar('login', `inicio de ${usuario.nombre}`);
     set({ operador: usuario });
     const [caja, tasa] = await Promise.all([cajaAbierta(), getTasaCambio()]);
+    trazar('login', `listo caja=${caja ? 'abierta' : 'cerrada'} tasa=${tasa}`);
     set({ caja, tasa, inicializado: true });
   },
 

@@ -60,6 +60,12 @@ export function reportarError(origen: string, error: unknown) {
   agregarError(origen, error);
 }
 
+export function trazar(origen: string, mensaje: string): void {
+  invoke('log_evento', { origen, mensaje }).catch(() => {
+    /* sin backend (navegador) no se registra */
+  });
+}
+
 export function limpiarErrores() {
   errores = [];
   notificar();
