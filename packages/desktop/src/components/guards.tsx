@@ -18,3 +18,10 @@ export function RequiereCaja() {
   if (!caja) return <Navigate to="/abrir-caja" replace />;
   return <Outlet />;
 }
+
+/** Requiere que el operador tenga uno de los roles indicados. */
+export function RequiereRol({ roles }: { roles: string[] }) {
+  const operador = useSesion((s) => s.operador);
+  if (!operador || !roles.includes(operador.rol)) return <Navigate to="/" replace />;
+  return <Outlet />;
+}

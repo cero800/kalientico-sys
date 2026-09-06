@@ -9,7 +9,6 @@ import { formatUsdCents, formatVesCents } from '../lib/format';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { PageLoader } from '../components/ui/Spinner';
 import { CierreModal } from '../components/ui/CierreModal';
 
 export default function CerrarCajaPage() {

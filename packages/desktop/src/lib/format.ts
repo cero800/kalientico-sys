@@ -43,7 +43,7 @@ export function parseCentsInput(raw: string, moneda: Moneda): number | null {
   const t = raw.trim().replace(/[$ ]/g, '');
   if (t === '') return null;
 
-  let s = t;
+  let s: string;
   if (moneda === 'usd') {
     if (!RE_USD.test(t)) return null;
     s = t.replace(/,/g, '');

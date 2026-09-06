@@ -20,6 +20,7 @@ type Accion = 'produccion' | 'merma' | 'ajuste';
 
 export default function InventarioPage() {
   const operadorId = useSesion((s) => s.operador?.id ?? 0);
+  const esAdmin = useSesion((s) => s.operador?.rol === 'admin');
   const [stock, setStock] = useState<StockItem[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -115,12 +116,16 @@ export default function InventarioPage() {
         subtitle={`${stock.length} productos`}
         actions={
           <>
-            <Button variant="secondary" onClick={() => abrir('merma')}>
-              <MinusCircle className="h-4 w-4" /> Merma
-            </Button>
-            <Button variant="secondary" onClick={() => abrir('ajuste')}>
-              <Settings2 className="h-4 w-4" /> Ajuste
-            </Button>
+            {esAdmin && (
+              <>
+                <Button variant="secondary" onClick={() => abrir('merma')}>
+                  <MinusCircle className="h-4 w-4" /> Merma
+                </Button>
+                <Button variant="secondary" onClick={() => abrir('ajuste')}>
+                  <Settings2 className="h-4 w-4" /> Ajuste
+                </Button>
+              </>
+            )}
             <Button onClick={() => abrir('produccion')}>
               <Plus className="h-4 w-4" /> Producción
             </Button>

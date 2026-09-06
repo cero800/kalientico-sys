@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useSesion } from '../../store/sesion';
 import { formatUsdCents, formatVesCents } from '../../lib/format';
@@ -53,7 +52,6 @@ export function ClienteSelect({
   onChange: (empresaId: number) => void;
   clientes: Array<{ id: number; nombre: string; esMostrador?: boolean }>;
 }) {
-  const seleccion = clientes.find((c) => c.id === Number(value));
   return (
     <div>
       <label htmlFor="cliente-venta" className="mb-1 block text-xs font-medium text-gray-500">

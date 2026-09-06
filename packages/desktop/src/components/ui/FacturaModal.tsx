@@ -31,7 +31,7 @@ export function FacturaModal({ factura, onClose }: Props) {
     setGuardandoPdf(true);
     setErrorPdf(null);
     try {
-      const ruta = await guardarFacturaPdf(nombreArchivoFactura(factura), facturaPdfB64(factura));
+      const ruta = await guardarFacturaPdf(nombreArchivoFactura(factura), await facturaPdfB64(factura));
       setRutaPdf(ruta);
       guardadas.current.add(factura.venta_id);
     } catch (e) {

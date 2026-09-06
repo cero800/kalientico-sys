@@ -1,158 +1,132 @@
-# Panadería POS
+# Kalientico
 
-Sistema de punto de venta para una panadería: catálogo de productos, inventario,
-ventas con **moneda dual US$/Bs**, cobros mixtos, caja por moneda, estado de
-cuenta por cliente y reporte del día. Monorepo con back end nativo en
-**Rust/Tauri** y front end **React + Vite** (escritorio) y **Expo** (móvil).
+> Sistema de punto de venta para panificadoras: ventas en **US$ / Bs**,
+> inventario, caja por moneda, deudores y reportes. Aplicación de escritorio
+> construida con **Tauri 2 + Rust + React**.
+
+[![CI](https://img.shields.io/github/actions/workflow/status/cero800/kalientico-sys/ci.yml?branch=main&label=CI&logo=github)](https://github.com/cero800/kalientico-sys/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/cero800/kalientico-sys?logo=github)](https://github.com/cero800/kalientico-sys/releases)
+[![Licencia](https://img.shields.io/github/license/cero800/kalientico-sys)](./LICENSE)
+
+## Funcionalidades
+
+- **Venta (POS)**: grid de productos, carrito, cobro mixto US$/Bs con
+  selección de forma de pago, total fijo por moneda y generación de factura.
+- **Factura en PDF**: cada venta se guarda automáticamente en
+  `Documentos/kalientico/facturas/`.
+- **Inventario**: producción, mermas y ajustes; alertas de stock agotado.
+- **Caja por moneda**: apertura de turno y arqueo de efectivo US$/Bs
+  independientes, con diferencia derivada.
+- **Deudores**: estado de cuenta por cliente con abonos y pagos mixtos.
+- **Reporte del día**: resumen de producción, ventas y efectivo, exportable a
+  Excel (`Documentos/kalientico/excel/`).
+- **Seguridad**: sesión con PIN de 4 dígitos por operador y roles
+  `admin`/`cajero`.
+- **Copias de seguridad**: respaldo automático diario de la base de datos en
+  `Documentos/kalientico/backups/` (retención de 30 copias) + copia manual.
 
 ## Stack
 
-| Pieza        | Tecnología                                                        |
-| ------------ | ----------------------------------------------------------------- |
-| Escritorio   | Tauri 2 · React 18 · TypeScript · Vite 5 · Tailwind CSS           |
-| Móvil        | Expo (React Native) — fuera de alcance por ahora                  |
-| Back end     | Rust, 28 comandos Tauri (`#[tauri::command]`)                     |
-| Base de datos | SQLite (vía `rusqlite`), esquema versionado con migración         |
-| Monorepo     | pnpm workspaces (`packages/*`)                                    |
+| Pieza        | Tecnología                                                    |
+| ------------ | ------------------------------------------------------------- |
+| Escritorio   | Tauri 2 · React 18 · TypeScript · Vite 5 · Tailwind CSS       |
+| Back end     | Rust · 36 comandos Tauri (`#[tauri::command]`)                |
+| Base de datos | SQLite (vía `rusqlite`), esquema versionado con migraciones  |
+| Monorepo     | pnpm workspaces (`packages/*`)                                |
 
 ## Estructura
 
 ```
 kalientico-sys/
 ├── packages/
-│   ├── core/                  # @panaderia/core — tipos compartidos + helpers de moneda
+│   ├── core/                  # @panaderia/core — tipos compartidos + moneda
 │   │   └── src/
-│   │       ├── types/schema.ts    # todos los tipos del dominio (fuente única)
-│   │       ├── lib/money.ts       # conversión US$ ⇄ Bs y clave de la tasa
-│   │       └── database/queries.ts
+│   │       ├── types/schema.ts    # tipos del dominio (fuente única)
+│   │       └── lib/money.ts       # conversión US$ ⇄ Bs y clave de la tasa
 │   ├── desktop/               # @panaderia/desktop — app Tauri + React
 │   │   ├── src/
-│   │   │   ├── App.tsx            # placeholder (módulos funcionales en construcción)
-│   │   │   └── services/db.ts     # wrappers de invoke() hacia los comandos Rust
+│   │   │   ├── App.tsx            # rutas con lazy loading
+│   │   │   ├── pages/             # Venta, Productos, Clientes, Inventario…
+│   │   │   └── services/db.ts     # wrappers de invoke() → comandos Rust
 │   │   └── src-tauri/             # back end Rust
 │   │       └── src/
-│   │           ├── lib.rs         # registro de comandos y búsqueda de la BD
-│   │           ├── db.rs          # esquema SQLite (v2) + migración desde legado
-│   │           ├── repo.rs        # catálogo, inventario, usuarios
+│   │           ├── lib.rs         # registro de comandos y arranque
+│   │           ├── db.rs          # esquema SQLite (v3) + migraciones
+│   │           ├── repo.rs        # catálogo, inventario, usuarios y PIN
 │   │           ├── ventas.rs      # venta atómica (POS)
 │   │           ├── pagos.rs       # pagos, abonos y estado de cuenta
 │   │           ├── caja.rs        # arqueo de turno por moneda
-│   │           ├── reporte.rs     # configuración clave/valor y reporte del día
-│   │           ├── validators.rs  # validaciones centralizadas y conversión a US$
+│   │           ├── reporte.rs     # config clave/valor y reporte del día
+│   │           ├── factura.rs     # asamblea de la factura impresa
+│   │           ├── backup.rs      # copias de seguridad diarias + manuales
+│   │           ├── validators.rs  # validaciones centralizadas
 │   │           └── types.rs       # structs del dominio
-│   └── mobile/                # @panaderia/mobile — app Expo (placeholder)
+│   └── mobile/                # @panaderia/mobile — app Expo (fuera de alcance)
 └── graphify-out/              # grafo del proyecto (graphify), versionado
 ```
 
 ## Modelo de moneda dual (US$ / Bs)
 
-- **Base**: los precios y totales de venta siempre se guardan en **US$**
-  (centavos, `i64`).
-- **Tasa**: clave global `tasa_cambio` en la tabla `config` (Bs por 1 US$),
-  configurable desde la app.
+- **Base**: precios y totales de venta siempre en **US$** (céntimos, `i64`).
+- **Tasa**: clave global `tasa_cambio` en `config` (Bs por 1 US$), editable
+  desde la app.
 - **Snapshot**: cada venta, pago o cierre de caja congela la `tasa_cambio`
-  vigente, de modo que el histórico es fiel aunque la tasa cambie.
-- **Cobros mixtos**: un mismo cobro puede componerse de pagos en US$ y en Bs;
-  cada pago guarda su `moneda` y su `tasa_cambio`.
-- **Caja por moneda**: el arqueo lleva efectivo inicial/ventas/egresos/final y
-  la diferencia derivada **por separado** en US$ y en Bs.
-- **Estado de cuenta**: los pagos en Bs se convierten a US$ con su tasa
-  congelada para derivar el saldo pendiente.
-- Los montos con decimales se manejan en **céntimos** de su moneda
-  (centavos US$ / céntimos de Bs).
-
-## Back end
-
-### Esquema SQLite (v2)
-
-`empresas`, `productos`, `precios_cliente`, `stock`, `movimientos_inventario`,
-`producciones`, `ventas`, `detalle_ventas`, `pagos`, `usuarios`, `cajas`,
-`config`.
-
-- Migración desde el esquema legado (`pedidos` → `ventas`) solo en desarrollo;
-  la migración de producción es no destructiva.
-- Integridad referencial activa (`PRAGMA foreign_keys = ON`) y transacciones
-  para las operaciones compuestas.
-
-### Reglas de negocio
-
-- **Venta atómica**: reserva de correlativo de factura, validación y descuento
-  de stock, cabecera + detalle + pagos en una sola transacción con *rollback*.
-- **Cobro de contado**: debe cubrir el total (en US$ convertido) sin sobrepasar.
-- **Crédito**: la venta se registra sin pagos y el saldo queda derivado.
-- **Anulación**: revierte el stock y marca la venta `anulada` (el número de
-  factura no se reutiliza; los pagos salen del estado de cuenta).
-- **Caja de turno**: una sola abierta a la vez; sin caja abierta no se vende.
-- **Saldo pendiente**: siempre derivado (`SUM(ventas) − SUM(pagos)`), nunca
-  almacenado.
-
-### Comandos Tauri (28)
-
-Catálogo: `listar_empresas`, `crear_empresa`, `eliminar_empresa`,
-`listar_productos`, `crear_producto`, `actualizar_producto`,
-`eliminar_producto`, `listar_precios_cliente`, `set_precio_cliente`.
-
-Usuarios: `listar_usuarios`, `crear_usuario`.
-
-Inventario: `listar_stock`, `registrar_produccion`, `registrar_merma`,
-`registrar_ajuste`.
-
-Ventas: `crear_venta`, `listar_ventas`, `anular_venta`.
-
-Pagos: `estado_cuenta`, `estado_cuenta_todos`, `registrar_abono`,
-`historial_pagos`.
-
-Caja: `caja_abierta`, `abrir_caja`, `cerrar_caja`.
-
-Reporte/config: `resumen_dia`, `get_config`, `set_config`.
-
-### Tests
-
-27 tests unitarios de Rust sobre SQLite en memoria (`#[cfg(test)]`), cubriendo
-validaciones, conversión de moneda, ventas (contado/crédito/mixto), rollback por
-stock insuficiente, correlativo, anulación con reversión de inventario, caja por
-moneda, pagos/abonos y el reporte del día.
-
-## Front end (escritorio — en construcción)
-
-El backend está completo; la UI está en desarrollo. Ya existe:
-
-- Capa de servicios `src/services/db.ts` con *wrappers* tipados de `invoke()`.
-- Tipos compartidos y helpers de moneda en `@panaderia/core`, consumidos por la
-  app (fuente única; sin duplicación de interfaces).
-
-Módulos planeados: Sesión (login), Venta (POS con grid de productos, carrito y
-barra de cobro con monto dual), Caja (apertura/arqueo por moneda), Catálogo,
-Reporte.
+  vigente; el histórico queda fiel aunque la tasa cambie.
+- **Cobros mixtos**: un cobro se compone de pagos en US$ y Bs; cada pago guarda
+  su `moneda` y `tasa_cambio`.
+- **Caja por moneda**: arqueo con efectivo inicial/ventas/egresos/final y
+  diferencia **por separado** en US$ y en Bs.
+- Los montos decimales se manejan en **céntimos** de su moneda.
 
 ## Puesta en marcha
 
-Requisitos: Node.js ≥ 18, pnpm ≥ 8, Rust (toolchain estable) y las
-dependencias de Tauri 2.
+Requisitos: Node.js ≥ 18, pnpm ≥ 8, Rust estable y las dependencias de Tauri 2.
 
 ```bash
 # Dependencias e instalación
 pnpm install
 
-# Tipos compartidos (`@panaderia/core`) — se consumen desde su build
+# Tipos compartidos (`@panaderia/core`)
 pnpm build:core
 
-# Tests del back end
-cd packages/desktop/src-tauri && cargo test
+# Aplicación de escritorio en modo desarrollo
+pnpm --filter @panaderia/desktop tauri:dev
 ```
 
-### Tasa de cambio
+### Tests y calidad
 
-Antes de operar conviene fijar la tasa vigente; se guarda en `config`
-(clave `tasa_cambio`, en Bs por 1 US$):
+```bash
+pnpm --filter @panaderia/core build
+pnpm --filter @panaderia/desktop build      # typecheck + build vite
+pnpm --filter @panaderia/desktop lint       # ESLint
+pnpm --filter @panaderia/desktop test       # Vitest (60 pruebas)
 
-```sql
-INSERT INTO config (clave, valor) VALUES ('tasa_cambio', '36.85')
-ON CONFLICT(clave) DO UPDATE SET valor = '36.85';
+cd packages/desktop/src-tauri
+cargo fmt --all --check
+cargo clippy --all-targets -- -D warnings
+cargo test                                  # 47 pruebas Rust
 ```
 
-Si no existe se asume `1` (sin conversión), y `crear_venta` / `registrar_abono`
-/ `cerrar_caja` la congelan como snapshot de cada operación.
+## Releases
+
+Los instaladores se generan automáticamente al etiquetar una versión:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Esto crea un *draft release* con binarios de:
+
+- **Windows**: instalador NSIS y MSI.
+- **Linux**: `.deb`, `.rpm` y AppImage.
+
+> Los binarios **no están firmados** todavía; ver `SECURITY.md` para firmarlos
+> antes de distribuir en producción.
+
+## Licencia
+
+MIT — ver [`LICENSE`](./LICENSE).
 
 ## Grafo del proyecto
 

@@ -21,6 +21,7 @@ pub fn usuario(conn: &Connection) -> i64 {
             nombre: "Test".into(),
             rol: "admin".into(),
             activo: true,
+            pin: Some("1234".into()),
         },
     )
     .unwrap()

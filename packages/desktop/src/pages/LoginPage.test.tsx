@@ -9,6 +9,7 @@ vi.mock('../services/db', () => ({
     { id: 1, nombre: 'Ana', rol: 'admin', activo: true },
     { id: 2, nombre: 'Luis', rol: 'cajero', activo: false },
   ]),
+  verificarPin: vi.fn().mockResolvedValue(true),
   cajaAbierta: vi.fn().mockResolvedValue(null),
   getTasaCambio: vi.fn().mockResolvedValue(36.85),
 }));
@@ -39,13 +40,29 @@ describe('LoginPage', () => {
     expect(screen.queryByRole('button', { name: /Luis/i })).not.toBeInTheDocument();
   });
 
-  it('inicia sesión al elegir operador y navega al inicio', async () => {
+  it('pide PIN, inicia sesión al validarlo y navega al inicio', async () => {
     const user = userEvent.setup();
     renderConRouter();
     await user.click(await screen.findByRole('button', { name: /Ana/i }));
+    await user.type(screen.getByLabelText(/PIN/i), '4821');
+    await user.click(screen.getByRole('button', { name: /Entrar/i }));
     expect(useSesion.getState().operador?.nombre).toBe('Ana');
     expect(await screen.findByText(/Home/)).toBeInTheDocument();
     expect(screen.getByTestId('operador')).toHaveTextContent('Ana');
     useSesion.getState().logout();
+  });
+
+  it('muestra error con PIN incorrecto y permite volver', async () => {
+    const { verificarPin } = await import('../services/db');
+    vi.mocked(verificarPin).mockResolvedValueOnce(false);
+    const user = userEvent.setup();
+    renderConRouter();
+    await user.click(await screen.findByRole('button', { name: /Ana/i }));
+    await user.type(screen.getByLabelText(/PIN/i), '0000');
+    await user.click(screen.getByRole('button', { name: /Entrar/i }));
+    expect(await screen.findByText(/PIN incorrecto/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Volver/i }));
+    expect(screen.queryByLabelText(/PIN/i)).not.toBeInTheDocument();
+    expect(useSesion.getState().operador).toBeNull();
   });
 });

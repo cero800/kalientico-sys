@@ -13,9 +13,13 @@ use rusqlite::{params, Connection, OptionalExtension};
 pub const KEY_TASA_CAMBIO: &str = "tasa_cambio";
 
 pub fn get_config(conn: &Connection, clave: &str) -> Result<Option<String>, String> {
-    conn.query_row("SELECT valor FROM config WHERE clave = ?1", params![clave], |r| r.get(0))
-        .optional()
-        .map_err(|e| e.to_string())
+    conn.query_row(
+        "SELECT valor FROM config WHERE clave = ?1",
+        params![clave],
+        |r| r.get(0),
+    )
+    .optional()
+    .map_err(|e| e.to_string())
 }
 
 pub fn set_config(conn: &Connection, clave: &str, valor: &str) -> Result<(), String> {
@@ -147,14 +151,15 @@ pub fn resumen_dia(conn: &Connection, fecha_opt: Option<&str>) -> Result<Resumen
          FROM pagos
          WHERE tipo_pago = 'efectivo' AND {cond_pagos}"
     );
-    let (pagos_efectivo_usd, pagos_efectivo_ves): (i64, i64) =
-        if fecha_pagos.is_empty() {
-            conn.query_row(&sql_pagos, [], |r| Ok((r.get(0)?, r.get(1)?)))
-                .map_err(|e| e.to_string())?
-        } else {
-            conn.query_row(&sql_pagos, params![fecha_pagos], |r| Ok((r.get(0)?, r.get(1)?)))
-                .map_err(|e| e.to_string())?
-        };
+    let (pagos_efectivo_usd, pagos_efectivo_ves): (i64, i64) = if fecha_pagos.is_empty() {
+        conn.query_row(&sql_pagos, [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(|e| e.to_string())?
+    } else {
+        conn.query_row(&sql_pagos, params![fecha_pagos], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .map_err(|e| e.to_string())?
+    };
 
     // Deudores: todos los clientes con saldo pendiente > 0
     let deudores = estado_cuenta_todos(conn)?

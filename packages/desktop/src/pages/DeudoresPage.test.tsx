@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { historialPagos, registrarAbono, estadoCuentaTodos } from '../services/db';
+import { registrarAbono } from '../services/db';
 import { useSesion } from '../store/sesion';
 import DeudoresPage from './DeudoresPage';
 

@@ -70,7 +70,8 @@ pub fn estado_cuenta_todos(conn: &Connection) -> Result<Vec<EstadoCuenta>, Strin
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<rusqlite::Result<Vec<EstadoCuenta>>>().map_err(|e| e.to_string())
+    rows.collect::<rusqlite::Result<Vec<EstadoCuenta>>>()
+        .map_err(|e| e.to_string())
 }
 
 /// Registra un abono a cuenta (no asociado a una factura).
@@ -125,7 +126,8 @@ pub fn historial_pagos(conn: &Connection, empresa_id: i64) -> Result<Vec<PagoLin
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<rusqlite::Result<Vec<PagoLinea>>>().map_err(|e| e.to_string())
+    rows.collect::<rusqlite::Result<Vec<PagoLinea>>>()
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -174,7 +176,9 @@ mod tests {
         let historial = historial_pagos(&conn, eid).unwrap();
         assert_eq!(historial.len(), 2);
         assert!(historial.iter().any(|p| p.moneda == "usd"));
-        assert!(historial.iter().any(|p| p.moneda == "ves" && p.tasa_cambio == 36.85));
+        assert!(historial
+            .iter()
+            .any(|p| p.moneda == "ves" && p.tasa_cambio == 36.85));
     }
 
     #[test]
@@ -227,7 +231,9 @@ mod tests {
         };
         registrar_abono(&conn, &a).unwrap();
         let (tipo, refe): (String, String) = conn
-            .query_row("SELECT tipo_pago, numero_referencia FROM pagos", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .query_row("SELECT tipo_pago, numero_referencia FROM pagos", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
             .unwrap();
         assert_eq!(tipo, "pago_movil");
         assert_eq!(refe, "R-99");

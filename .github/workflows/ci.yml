@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: Escritorio (Linux)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencias del sistema (Tauri v2)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl wget file \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y patchelf
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Compilar núcleo compartido
+        run: pnpm --filter @panaderia/core build
+
+      - name: Typecheck + build frontend
+        run: pnpm --filter @panaderia/desktop build
+
+      - name: Tests frontend
+        run: pnpm --filter @panaderia/desktop test
+
+      - name: Lint frontend
+        run: pnpm --filter @panaderia/desktop lint
+
+      - name: Formato Rust
+        working-directory: packages/desktop/src-tauri
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        working-directory: packages/desktop/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests Rust
+        working-directory: packages/desktop/src-tauri
+        run: cargo test

@@ -1,7 +1,6 @@
 // Generación del PDF de factura con jsPDF. Mismo contenido que el modal
 // imprimible: encabezado del negocio, número, cliente, detalle y pagos.
 
-import { jsPDF } from 'jspdf';
 import type { Factura } from '@panaderia/core';
 import { TIPO_PAGO_LABELS } from '@panaderia/core';
 import { formatCents, formatUsdCents } from './format';
@@ -16,7 +15,9 @@ export function nombreArchivoFactura(f: Factura): string {
 }
 
 /// Contenido base64 del PDF (sin el prefijo `data:application/pdf...`).
-export function facturaPdfB64(f: Factura): string {
+/// jsPDF se carga bajo demanda para no inflar el bundle inicial.
+export async function facturaPdfB64(f: Factura): Promise<string> {
+  const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
   const w = doc.internal.pageSize.getWidth();
   const centro = w / 2;

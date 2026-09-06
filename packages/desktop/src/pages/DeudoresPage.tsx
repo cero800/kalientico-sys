@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, RefreshCw, Wallet } from 'lucide-react';
 import type { AbonoInput, EstadoCuenta, PagoLinea, Moneda, TipoPago } from '@panaderia/core';
 import { TIPO_PAGO_LABELS, toUsd, toVes } from '@panaderia/core';
-import { estadoCuenta, estadoCuentaTodos, historialPagos, registrarAbono } from '../services/db';
+import { estadoCuentaTodos, historialPagos, registrarAbono } from '../services/db';
 import { formatCents, formatUsdCents, formatVesCents, parseCentsInput } from '../lib/format';
 import { useSesion } from '../store/sesion';
 import { Card, CardHeader } from '../components/ui/Card';

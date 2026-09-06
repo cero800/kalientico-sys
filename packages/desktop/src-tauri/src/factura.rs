@@ -15,18 +15,18 @@ pub const KEY_NEGOCIO_DIRECCION: &str = "negocio_direccion";
 
 /// Factura completa de una venta (cabecera + cliente + detalle + pagos).
 pub fn factura_venta(conn: &Connection, venta_id: i64) -> Result<Factura, String> {
-    let (empresa_id, numero_factura, tipo, estado, fecha, subtotal, descuento, impuesto, total, tasa_cambio): (
-        i64,
-        i64,
-        String,
-        String,
-        String,
-        i64,
-        i64,
-        i64,
-        i64,
-        f64,
-    ) = conn
+    let (
+        empresa_id,
+        numero_factura,
+        tipo,
+        estado,
+        fecha,
+        subtotal,
+        descuento,
+        impuesto,
+        total,
+        tasa_cambio,
+    ): (i64, i64, String, String, String, i64, i64, i64, i64, f64) = conn
         .query_row(
             "SELECT empresa_id, numero_factura, tipo, estado, fecha,
                     subtotal, descuento, impuesto, total, tasa_cambio

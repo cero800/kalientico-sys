@@ -48,7 +48,11 @@ pub fn crear_venta(conn: &mut Connection, v: &VentaInput) -> Result<Venta, Strin
     for p in &v.pagos {
         validators::validar_monto_positivo(p.monto, "Monto del pago")?;
         validators::validar_tipo_pago(&p.tipo_pago)?;
-        validators::validar_combinacion_pago(&p.tipo_pago, &p.moneda, p.numero_referencia.as_deref())?;
+        validators::validar_combinacion_pago(
+            &p.tipo_pago,
+            &p.moneda,
+            p.numero_referencia.as_deref(),
+        )?;
         pagado_usd += validators::a_usd(p.monto, &p.moneda, tasa_cambio)?;
     }
     if v.tipo == "contado" && pagado_usd < total {
@@ -122,7 +126,11 @@ pub fn crear_venta(conn: &mut Connection, v: &VentaInput) -> Result<Venta, Strin
             validators::validar_monto_positivo(p.monto, "Monto del pago")?;
             validators::validar_tipo_pago(&p.tipo_pago)?;
             validators::validar_moneda(&p.moneda)?;
-            validators::validar_combinacion_pago(&p.tipo_pago, &p.moneda, p.numero_referencia.as_deref())?;
+            validators::validar_combinacion_pago(
+                &p.tipo_pago,
+                &p.moneda,
+                p.numero_referencia.as_deref(),
+            )?;
             tx.execute(
                 "INSERT INTO pagos (empresa_id, venta_id, monto, tipo_pago, moneda, tasa_cambio, numero_referencia, operador_id)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -215,7 +223,8 @@ pub fn listar_ventas(conn: &Connection) -> Result<Vec<Venta>, String> {
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<rusqlite::Result<Vec<Venta>>>().map_err(|e| e.to_string())
+    rows.collect::<rusqlite::Result<Vec<Venta>>>()
+        .map_err(|e| e.to_string())
 }
 
 /// Anula una venta: revierte el stock de cada detalle y marca la venta como
@@ -282,7 +291,13 @@ mod tests {
     use crate::testutil::*;
     use crate::types::{DetalleVentaInput, PagoInput, VentaInput};
 
-    fn venta(empresa_id: i64, producto_id: i64, operador_id: i64, tipo: &str, pagos: Vec<PagoInput>) -> VentaInput {
+    fn venta(
+        empresa_id: i64,
+        producto_id: i64,
+        operador_id: i64,
+        tipo: &str,
+        pagos: Vec<PagoInput>,
+    ) -> VentaInput {
         VentaInput {
             empresa_id,
             tipo: tipo.into(),
@@ -324,8 +339,11 @@ mod tests {
         let pid = producto(&conn, 10_00); // $10.00
         stock(&conn, pid, 5.0);
 
-        let v = crear_venta(&mut conn, &venta(eid, pid, uid, "contado", vec![pago_usd(10_00)]))
-            .unwrap();
+        let v = crear_venta(
+            &mut conn,
+            &venta(eid, pid, uid, "contado", vec![pago_usd(10_00)]),
+        )
+        .unwrap();
         assert_eq!(v.total, 10_00);
         assert_eq!(v.moneda, "usd");
         assert_eq!(v.tasa_cambio, 36.85);
@@ -364,17 +382,29 @@ mod tests {
         stock(&conn, pid, 10.0);
         let v = crear_venta(
             &mut conn,
-            &venta(eid, pid, uid, "contado", vec![pago_usd(500), pago_ves(18_425)]),
+            &venta(
+                eid,
+                pid,
+                uid,
+                "contado",
+                vec![pago_usd(500), pago_ves(18_425)],
+            ),
         )
         .unwrap();
         assert_eq!(v.total, 10_00);
 
         let n: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pagos WHERE moneda='usd'", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM pagos WHERE moneda='usd'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(n, 1);
         let n: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pagos WHERE moneda='ves' AND tasa_cambio=36.85", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM pagos WHERE moneda='ves' AND tasa_cambio=36.85",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(n, 1);
     }
@@ -388,8 +418,11 @@ mod tests {
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
 
-        let err = crear_venta(&mut conn, &venta(eid, pid, uid, "contado", vec![pago_usd(500)]))
-            .unwrap_err();
+        let err = crear_venta(
+            &mut conn,
+            &venta(eid, pid, uid, "contado", vec![pago_usd(500)]),
+        )
+        .unwrap_err();
         assert!(err.contains("no cubre"), "{err}");
 
         // nada se persistió (rollback)
@@ -408,8 +441,11 @@ mod tests {
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
 
-        let err = crear_venta(&mut conn, &venta(eid, pid, uid, "contado", vec![pago_usd(10_02)]))
-            .unwrap_err();
+        let err = crear_venta(
+            &mut conn,
+            &venta(eid, pid, uid, "contado", vec![pago_usd(10_02)]),
+        )
+        .unwrap_err();
         assert!(err.contains("supera"), "{err}");
     }
 
@@ -441,7 +477,8 @@ mod tests {
         let err = crear_venta(&mut conn, &v).unwrap_err();
         assert!(err.contains("US$"), "{err}");
         assert_eq!(
-            conn.query_row("SELECT COUNT(*) FROM ventas", [], |r| r.get::<_, i64>(0)).unwrap(),
+            conn.query_row("SELECT COUNT(*) FROM ventas", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
             0
         );
     }
@@ -507,7 +544,9 @@ mod tests {
         .unwrap();
         assert_eq!(v.total, 10_00);
         let (tipo, refe): (String, String) = conn
-            .query_row("SELECT tipo_pago, numero_referencia FROM pagos", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .query_row("SELECT tipo_pago, numero_referencia FROM pagos", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
             .unwrap();
         assert_eq!(tipo, "pago_movil");
         assert_eq!(refe, "R-1");
@@ -569,8 +608,16 @@ mod tests {
         let pid = producto(&conn, 10_00);
         stock(&conn, pid, 50.0);
 
-        let a = crear_venta(&mut conn, &venta(eid, pid, uid, "contado", vec![pago_usd(10_00)])).unwrap();
-        let b = crear_venta(&mut conn, &venta(eid, pid, uid, "contado", vec![pago_usd(10_00)])).unwrap();
+        let a = crear_venta(
+            &mut conn,
+            &venta(eid, pid, uid, "contado", vec![pago_usd(10_00)]),
+        )
+        .unwrap();
+        let b = crear_venta(
+            &mut conn,
+            &venta(eid, pid, uid, "contado", vec![pago_usd(10_00)]),
+        )
+        .unwrap();
         assert_eq!(a.numero_factura, 1);
         assert_eq!(b.numero_factura, 2);
     }
@@ -585,7 +632,11 @@ mod tests {
         let pid = producto(&conn, 10_00);
         stock(&conn, pid, 5.0);
 
-        let v = crear_venta(&mut conn, &venta(eid, pid, uid, "contado", vec![pago_usd(10_00)])).unwrap();
+        let v = crear_venta(
+            &mut conn,
+            &venta(eid, pid, uid, "contado", vec![pago_usd(10_00)]),
+        )
+        .unwrap();
         let stock_tras_venta: f64 = conn
             .query_row(
                 "SELECT cantidad_disponible FROM stock WHERE producto_id = ?1",
@@ -607,7 +658,11 @@ mod tests {
         assert_eq!(stock_tras_anular, 5.0);
 
         let estado: String = conn
-            .query_row("SELECT estado FROM ventas WHERE id = ?1", rusqlite::params![v.id], |r| r.get(0))
+            .query_row(
+                "SELECT estado FROM ventas WHERE id = ?1",
+                rusqlite::params![v.id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(estado, "anulada");
     }
@@ -648,8 +703,11 @@ mod tests {
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
 
-        let err = crear_venta(&mut conn, &venta(eid, pid, uid, "contado", vec![pago_usd(10_00)]))
-            .unwrap_err();
+        let err = crear_venta(
+            &mut conn,
+            &venta(eid, pid, uid, "contado", vec![pago_usd(10_00)]),
+        )
+        .unwrap_err();
         assert!(err.contains("abrir la caja"), "{err}");
     }
 }

@@ -77,8 +77,28 @@ export const setPrecioCliente = (precio: PrecioClienteInput) => invoke('set_prec
 
 // Usuarios
 export const listarUsuarios = () => invoke<Usuario[]>('listar_usuarios');
+
 export const crearUsuario = (usuario: UsuarioInput) => invoke<number>('crear_usuario', { usuario });
 
+export const verificarPin = (usuario_id: number, pin: string) =>
+  invoke<boolean>('verificar_pin', { usuario_id, pin });
+
+export const cambiarPin = (usuario_id: number, pin_actual: string, pin_nuevo: string) =>
+  invoke<void>('cambiar_pin', { usuario_id, pin_actual, pin_nuevo });
+
+export interface BackupItem {
+  nombre: string;
+  ruta: string;
+  tamano_bytes: number;
+  fecha: string;
+}
+
+export const listarBackups = () => invoke<BackupItem[]>('listar_backups');
+
+export const crearBackup = () => invoke<BackupItem>('crear_backup');
+
+export const eliminarBackup = (nombre_archivo: string) =>
+  invoke<void>('eliminar_backup', { nombre_archivo });
 // Inventario
 export const listarStock = () => invoke<StockItem[]>('listar_stock');
 export const registrarProduccion = (args: { producto_id: number; cantidad: number; costo_unitario: number; operador_id: number; fecha: string }) =>
@@ -116,6 +136,9 @@ export const getFactura = (venta_id: number) => invoke<Factura>('obtener_factura
 // Guarda el PDF de la factura en Documentos/kalientico/facturas/ y devuelve la ruta.
 export const guardarFacturaPdf = (nombre_archivo: string, contenido_b64: string) =>
   invoke<string>('guardar_factura_pdf', { nombreArchivo: nombre_archivo, contenidoB64: contenido_b64 });
+
+export const guardarReporteExcel = (nombre_archivo: string, contenido_b64: string) =>
+  invoke<string>('guardar_reporte_excel', { nombreArchivo: nombre_archivo, contenidoB64: contenido_b64 });
 
 // Tasa de cambio (Bs por 1 US$) — conveniencia sobre get/setConfig.
 export const getTasaCambio = async (): Promise<number> => {

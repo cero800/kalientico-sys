@@ -36,7 +36,8 @@ pub fn listar_empresas(conn: &Connection) -> Result<Vec<Empresa>, String> {
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<SqlResult<Vec<Empresa>>>().map_err(|e| e.to_string())
+    rows.collect::<SqlResult<Vec<Empresa>>>()
+        .map_err(|e| e.to_string())
 }
 
 pub fn crear_empresa(conn: &Connection, e: &EmpresaInput) -> Result<i64, String> {
@@ -103,7 +104,8 @@ pub fn listar_productos(conn: &Connection) -> Result<Vec<Producto>, String> {
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<SqlResult<Vec<Producto>>>().map_err(|e| e.to_string())
+    rows.collect::<SqlResult<Vec<Producto>>>()
+        .map_err(|e| e.to_string())
 }
 
 pub fn crear_producto(conn: &Connection, p: &ProductoInput) -> Result<i64, String> {
@@ -216,12 +218,7 @@ pub fn precio_efectivo(
            ON pc.producto_id = p.id AND pc.empresa_id = ?2
          WHERE p.id = ?1 AND p.activo = 1",
         params![producto_id, empresa_id],
-        |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, i64>(1)?,
-            ))
-        },
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)),
     )
     // El impuesto quedó eliminado: la venta nunca aplica porcentaje.
     .map(|(unidad, precio)| (precio, 0.0, unidad))
@@ -237,7 +234,15 @@ pub fn descontar_stock(
     venta_id: i64,
     operador_id: i64,
 ) -> Result<(), String> {
-    aplicar_movimiento_in_tx(tx, producto_id, "salida_venta", cantidad, Some("Venta"), Some(venta_id), operador_id)
+    aplicar_movimiento_in_tx(
+        tx,
+        producto_id,
+        "salida_venta",
+        cantidad,
+        Some("Venta"),
+        Some(venta_id),
+        operador_id,
+    )
 }
 
 /// Respende stock de una venta anulada (entrada compensatoria, tipo 'ajuste').
@@ -248,7 +253,15 @@ pub fn reponer_stock(
     venta_id: i64,
     operador_id: i64,
 ) -> Result<(), String> {
-    aplicar_movimiento_in_tx(tx, producto_id, "ajuste", cantidad, Some("Anulación de venta"), Some(venta_id), operador_id)
+    aplicar_movimiento_in_tx(
+        tx,
+        producto_id,
+        "ajuste",
+        cantidad,
+        Some("Anulación de venta"),
+        Some(venta_id),
+        operador_id,
+    )
 }
 
 // ------------------------------------------------------------
@@ -296,7 +309,15 @@ pub fn registrar_produccion(
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     {
         // entradas dentro de la transacción
-        aplicar_movimiento_in_tx(&tx, producto_id, "entrada_produccion", cantidad, Some("Producción"), None, operador_id)?;
+        aplicar_movimiento_in_tx(
+            &tx,
+            producto_id,
+            "entrada_produccion",
+            cantidad,
+            Some("Producción"),
+            None,
+            operador_id,
+        )?;
         tx.execute(
             "INSERT INTO producciones (fecha, producto_id, cantidad, costo_unitario, operador_id)
              VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -379,7 +400,15 @@ pub fn registrar_merma(
         return Err("La merma requiere un motivo".to_string());
     }
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    aplicar_movimiento_in_tx(&tx, producto_id, "merma", cantidad, Some(motivo), None, operador_id)?;
+    aplicar_movimiento_in_tx(
+        &tx,
+        producto_id,
+        "merma",
+        cantidad,
+        Some(motivo),
+        None,
+        operador_id,
+    )?;
     tx.commit().map_err(|e| e.to_string())
 }
 
@@ -459,7 +488,10 @@ fn aplicar_ajuste_in_tx(
 // Precios del cliente
 // ------------------------------------------------------------
 
-pub fn listar_precios_cliente(conn: &Connection, empresa_id: i64) -> Result<Vec<PrecioCliente>, String> {
+pub fn listar_precios_cliente(
+    conn: &Connection,
+    empresa_id: i64,
+) -> Result<Vec<PrecioCliente>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT id, empresa_id, producto_id, precio_especial
@@ -476,7 +508,8 @@ pub fn listar_precios_cliente(conn: &Connection, empresa_id: i64) -> Result<Vec<
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<SqlResult<Vec<PrecioCliente>>>().map_err(|e| e.to_string())
+    rows.collect::<SqlResult<Vec<PrecioCliente>>>()
+        .map_err(|e| e.to_string())
 }
 
 pub fn set_precio_cliente(conn: &Connection, p: &PrecioClienteInput) -> Result<(), String> {
@@ -510,7 +543,8 @@ pub fn listar_usuarios(conn: &Connection) -> Result<Vec<Usuario>, String> {
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<SqlResult<Vec<Usuario>>>().map_err(|e| e.to_string())
+    rows.collect::<SqlResult<Vec<Usuario>>>()
+        .map_err(|e| e.to_string())
 }
 
 pub fn crear_usuario(conn: &Connection, u: &UsuarioInput) -> Result<i64, String> {
@@ -518,9 +552,15 @@ pub fn crear_usuario(conn: &Connection, u: &UsuarioInput) -> Result<i64, String>
         return Err("El nombre del usuario es obligatorio".to_string());
     }
     validators::validar_rol(&u.rol)?;
+    let pin = u
+        .pin
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+        .unwrap_or("1234");
+    validators::validar_pin(pin)?;
     conn.execute(
-        "INSERT INTO usuarios (nombre, rol, activo) VALUES (?1, ?2, ?3)",
-        params![u.nombre.trim(), u.rol, u.activo],
+        "INSERT INTO usuarios (nombre, rol, activo, pin) VALUES (?1, ?2, ?3, ?4)",
+        params![u.nombre.trim(), u.rol, u.activo, pin],
     )
     .map_err(|e| e.to_string())?;
     Ok(conn.last_insert_rowid())
@@ -532,11 +572,46 @@ pub fn seed_usuario_admin(conn: &Connection) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     if count == 0 {
         conn.execute(
-            "INSERT INTO usuarios (nombre, rol) VALUES ('Administrador', 'admin')",
+            "INSERT INTO usuarios (nombre, rol, pin) VALUES ('Administrador', 'admin', '1234')",
             [],
         )
         .map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+/// Verifica que `pin` corresponda a un usuario activo. Nunca expone el PIN.
+pub fn verificar_pin(conn: &Connection, usuario_id: i64, pin: &str) -> Result<bool, String> {
+    let guardado: Option<String> = conn
+        .query_row(
+            "SELECT pin FROM usuarios WHERE id = ?1 AND activo = 1",
+            params![usuario_id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    match guardado {
+        None => Err("Usuario no encontrado".to_string()),
+        Some(p) => Ok(p == pin.trim()),
+    }
+}
+
+/// Cambia el PIN de un usuario verificando el actual.
+pub fn cambiar_pin(
+    conn: &Connection,
+    usuario_id: i64,
+    pin_actual: &str,
+    pin_nuevo: &str,
+) -> Result<(), String> {
+    validators::validar_pin(pin_nuevo)?;
+    if !verificar_pin(conn, usuario_id, pin_actual)? {
+        return Err("El PIN actual no es correcto".to_string());
+    }
+    conn.execute(
+        "UPDATE usuarios SET pin = ?2 WHERE id = ?1",
+        params![usuario_id, pin_nuevo.trim()],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -563,8 +638,10 @@ pub fn seed_cliente_mostrador(conn: &Connection) -> Result<(), String> {
 
 /// Mapea errores de constraint UNIQUE de SQLite a mensajes legibles.
 fn duplicado_a_error(e: rusqlite::Error, entidad: &str) -> String {
-match e {
-        rusqlite::Error::SqliteFailure(e, _) if e.code == rusqlite::ErrorCode::ConstraintViolation => {
+    match e {
+        rusqlite::Error::SqliteFailure(e, _)
+            if e.code == rusqlite::ErrorCode::ConstraintViolation =>
+        {
             format!("Ya existe una {entidad}")
         }
         _ => e.to_string(),
@@ -591,7 +668,11 @@ mod tests {
             .unwrap();
         assert_eq!(n, 1);
         let nombre: String = conn
-            .query_row("SELECT nombre_comercial FROM empresas WHERE rut_nit='0'", [], |r| r.get(0))
+            .query_row(
+                "SELECT nombre_comercial FROM empresas WHERE rut_nit='0'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(nombre, "Consumidor Final");
     }
@@ -610,14 +691,25 @@ mod tests {
         };
         let id = crear_producto(&conn, &p).unwrap();
         let pct: f64 = conn
-            .query_row("SELECT impuesto_porcentaje FROM productos WHERE id = ?1", params![id], |r| r.get(0))
+            .query_row(
+                "SELECT impuesto_porcentaje FROM productos WHERE id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(pct, 0.0);
 
-        let p_mut = ProductoInput { precio_base: 600, ..p };
+        let p_mut = ProductoInput {
+            precio_base: 600,
+            ..p
+        };
         actualizar_producto(&conn, id, &p_mut).unwrap();
         let pct: f64 = conn
-            .query_row("SELECT impuesto_porcentaje FROM productos WHERE id = ?1", params![id], |r| r.get(0))
+            .query_row(
+                "SELECT impuesto_porcentaje FROM productos WHERE id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(pct, 0.0);
 
@@ -625,5 +717,74 @@ mod tests {
         assert_eq!(precio, 600);
         assert_eq!(pct, 0.0);
         assert_eq!(unidad, "unidad");
+    }
+
+    #[test]
+    fn admin_seed_tiene_pin_por_defecto() {
+        let conn = conn();
+        seed_usuario_admin(&conn).unwrap();
+        let (rol, pin): (String, Option<String>) = conn
+            .query_row("SELECT rol, pin FROM usuarios WHERE id = 1", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(rol, "admin");
+        assert_eq!(pin.as_deref(), Some("1234"));
+    }
+
+    #[test]
+    fn verificar_pin_acepta_y_rechaza() {
+        let conn = conn();
+        let id = crear_usuario(
+            &conn,
+            &UsuarioInput {
+                nombre: "Alex".into(),
+                rol: "cajero".into(),
+                activo: true,
+                pin: Some("4821".into()),
+            },
+        )
+        .unwrap();
+        assert!(verificar_pin(&conn, id, "4821").unwrap());
+        assert!(!verificar_pin(&conn, id, "0000").unwrap());
+        // usuario inactivo no puede validarse
+        conn.execute("UPDATE usuarios SET activo = 0 WHERE id = ?1", params![id])
+            .unwrap();
+        assert!(verificar_pin(&conn, id, "4821").is_err());
+    }
+
+    #[test]
+    fn cambiar_pin_verifica_actual_y_valida_formato() {
+        let conn = conn();
+        seed_usuario_admin(&conn).unwrap();
+        assert!(cambiar_pin(&conn, 1, "1234", "9999").is_ok());
+        assert!(verificar_pin(&conn, 1, "9999").unwrap());
+        // PIN actual incorrecto
+        assert!(cambiar_pin(&conn, 1, "1234", "7777").is_err());
+        // formato inválido
+        assert!(cambiar_pin(&conn, 1, "9999", "12").is_err());
+        assert!(cambiar_pin(&conn, 1, "9999", "abcd").is_err());
+        assert!(verificar_pin(&conn, 1, "9999").unwrap());
+    }
+
+    #[test]
+    fn crear_usuario_sin_pin_usa_default() {
+        let conn = conn();
+        let id = crear_usuario(
+            &conn,
+            &UsuarioInput {
+                nombre: "Bety".into(),
+                rol: "cajero".into(),
+                activo: true,
+                pin: None,
+            },
+        )
+        .unwrap();
+        let pin: Option<String> = conn
+            .query_row("SELECT pin FROM usuarios WHERE id = ?1", params![id], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(pin.as_deref(), Some("1234"));
     }
 }

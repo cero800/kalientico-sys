@@ -1,3 +1,4 @@
+mod backup;
 mod caja;
 mod db;
 mod factura;
@@ -12,8 +13,8 @@ mod ventas;
 pub(crate) mod testutil;
 
 use crate::types::{
-    AbonoInput, CajaAbrirInput, CajaCerrarInput, EmpresaInput,
-    PrecioClienteInput, ProductoInput, UsuarioInput, VentaInput,
+    AbonoInput, CajaAbrirInput, CajaCerrarInput, EmpresaInput, PrecioClienteInput, ProductoInput,
+    UsuarioInput, VentaInput,
 };
 use db::Db;
 use rusqlite::Connection;
@@ -26,8 +27,9 @@ fn open_database(app: &tauri::App) -> Result<Connection, String> {
         .app_data_dir()
         .map_err(|e| format!("No se pudo obtener el directorio de datos: {e}"))?;
     let db_path = dir.join("panaderia.db");
-    // Dev: recrear si el esquema cambió. Producción: migrar sin borrar.
-    let recrear_si_desactualizada = true;
+    // Solo en desarrollo se recrea la BD si el esquema cambió; en un build de
+    // release NUNCA se destruye la base (aviso de pérdida de datos).
+    let recrear_si_desactualizada = cfg!(debug_assertions);
     db::open(db_path, recrear_si_desactualizada).map_err(|e| e.to_string())
 }
 
@@ -65,7 +67,11 @@ fn crear_producto(state: State<'_, Db>, producto: ProductoInput) -> Result<i64, 
 }
 
 #[tauri::command]
-fn actualizar_producto(state: State<'_, Db>, id: i64, producto: ProductoInput) -> Result<(), String> {
+fn actualizar_producto(
+    state: State<'_, Db>,
+    id: i64,
+    producto: ProductoInput,
+) -> Result<(), String> {
     repo::actualizar_producto(&*lock(&state)?, id, &producto)
 }
 
@@ -75,7 +81,10 @@ fn eliminar_producto(state: State<'_, Db>, id: i64) -> Result<(), String> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn listar_precios_cliente(state: State<'_, Db>, empresa_id: i64) -> Result<Vec<types::PrecioCliente>, String> {
+fn listar_precios_cliente(
+    state: State<'_, Db>,
+    empresa_id: i64,
+) -> Result<Vec<types::PrecioCliente>, String> {
     repo::listar_precios_cliente(&*lock(&state)?, empresa_id)
 }
 
@@ -98,6 +107,21 @@ fn crear_usuario(state: State<'_, Db>, usuario: UsuarioInput) -> Result<i64, Str
     repo::crear_usuario(&*lock(&state)?, &usuario)
 }
 
+#[tauri::command]
+fn verificar_pin(state: State<'_, Db>, usuario_id: i64, pin: String) -> Result<bool, String> {
+    repo::verificar_pin(&*lock(&state)?, usuario_id, &pin)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn cambiar_pin(
+    state: State<'_, Db>,
+    usuario_id: i64,
+    pin_actual: String,
+    pin_nuevo: String,
+) -> Result<(), String> {
+    repo::cambiar_pin(&*lock(&state)?, usuario_id, &pin_actual, &pin_nuevo)
+}
+
 //---------------------------------------------------------------------------
 // Comandos — Inventario
 //---------------------------------------------------------------------------
@@ -117,7 +141,14 @@ fn registrar_produccion(
     fecha: String,
 ) -> Result<(), String> {
     let mut conn = lock(&state)?;
-    repo::registrar_produccion(&mut conn, producto_id, cantidad, costo_unitario, operador_id, &fecha)
+    repo::registrar_produccion(
+        &mut conn,
+        producto_id,
+        cantidad,
+        costo_unitario,
+        operador_id,
+        &fecha,
+    )
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -160,7 +191,12 @@ fn listar_ventas(state: State<'_, Db>) -> Result<Vec<types::Venta>, String> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn anular_venta(state: State<'_, Db>, venta_id: i64, motivo: String, operador_id: i64) -> Result<(), String> {
+fn anular_venta(
+    state: State<'_, Db>,
+    venta_id: i64,
+    motivo: String,
+    operador_id: i64,
+) -> Result<(), String> {
     let mut conn = lock(&state)?;
     ventas::anular_venta(&mut conn, venta_id, &motivo, operador_id)
 }
@@ -272,8 +308,102 @@ fn guardar_factura_pdf(
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("No se pudo crear la carpeta de facturas: {e}"))?;
     let ruta = dir.join(nombre);
-    let mut archivo = std::fs::File::create(&ruta)
-        .map_err(|e| format!("No se pudo crear el archivo: {e}"))?;
+    let mut archivo =
+        std::fs::File::create(&ruta).map_err(|e| format!("No se pudo crear el archivo: {e}"))?;
+    archivo
+        .write_all(&bytes)
+        .map_err(|e| format!("No se pudo escribir el archivo: {e}"))?;
+    Ok(ruta.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn crear_backup(state: State<'_, Db>, app: tauri::AppHandle) -> Result<types::BackupItem, String> {
+    let item = backup::crear_backup(&*lock(&state)?, &app)?;
+    Ok(item)
+}
+
+#[tauri::command]
+fn listar_backups(app: tauri::AppHandle) -> Result<Vec<types::BackupItem>, String> {
+    backup::listar_backups(&app)
+}
+
+#[tauri::command]
+fn eliminar_backup(app: tauri::AppHandle, nombre_archivo: String) -> Result<(), String> {
+    backup::eliminar_backup(&app, &nombre_archivo)
+}
+
+/// Registra un error del frontend en `app_data/errores.log` (una línea por
+/// error, con fecha UTC) para diagnóstico sin consola.
+#[tauri::command]
+fn log_error(app: tauri::AppHandle, origen: String, mensaje: String) -> Result<(), String> {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("No se pudo obtener la carpeta de datos: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let ruta = dir.join("errores.log");
+
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let mut archivo = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&ruta)
+        .map_err(|e| format!("No se pudo abrir el log: {e}"))?;
+    let linea = format!("{ts} [{origen}] {mensaje}\n");
+    archivo
+        .write_all(linea.as_bytes())
+        .map_err(|e| format!("No se pudo escribir el log: {e}"))?;
+    Ok(())
+}
+
+/// Guarda un reporte XML/XLSX en `Documentos/kalientico/excel/` (o app-data si
+/// no hay carpeta Documentos) y devuelve la ruta completa del archivo.
+#[tauri::command]
+fn guardar_reporte_excel(
+    app: tauri::AppHandle,
+    nombre_archivo: String,
+    contenido_b64: String,
+) -> Result<String, String> {
+    use base64::engine::general_purpose::STANDARD as B64;
+    use base64::Engine as _;
+    use std::io::Write;
+
+    let bytes = B64
+        .decode(contenido_b64.trim())
+        .map_err(|e| format!("Contenido del reporte inválido: {e}"))?;
+
+    // Saneamiento del nombre: solo alfanuméricos, guiones, guion bajo y punto.
+    let nombre: String = nombre_archivo
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if nombre.trim().is_empty() {
+        return Err("Nombre de archivo vacío".to_string());
+    }
+
+    let base = app
+        .path()
+        .document_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(|e| format!("No se pudo obtener el directorio de documentos: {e}"))?;
+    let dir = base.join("kalientico").join("excel");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("No se pudo crear la carpeta de reportes: {e}"))?;
+    let ruta = dir.join(nombre);
+    let mut archivo =
+        std::fs::File::create(&ruta).map_err(|e| format!("No se pudo crear el archivo: {e}"))?;
     archivo
         .write_all(&bytes)
         .map_err(|e| format!("No se pudo escribir el archivo: {e}"))?;
@@ -287,6 +417,10 @@ pub fn run() {
             let conn = open_database(app)?;
             repo::seed_usuario_admin(&conn)?;
             repo::seed_cliente_mostrador(&conn)?;
+            // Backup automático: uno por día, no estorba si ya existe.
+            if !backup::hay_backup_hoy(app.handle()).unwrap_or(false) {
+                let _ = backup::crear_backup(&conn, app.handle());
+            }
             app.manage(Db(Mutex::new(conn)));
             Ok(())
         })
@@ -302,6 +436,12 @@ pub fn run() {
             set_precio_cliente,
             listar_usuarios,
             crear_usuario,
+            verificar_pin,
+            cambiar_pin,
+            crear_backup,
+            listar_backups,
+            eliminar_backup,
+            log_error,
             listar_stock,
             registrar_produccion,
             registrar_merma,
@@ -321,6 +461,7 @@ pub fn run() {
             set_config,
             obtener_factura,
             guardar_factura_pdf,
+            guardar_reporte_excel,
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar la app Tauri");

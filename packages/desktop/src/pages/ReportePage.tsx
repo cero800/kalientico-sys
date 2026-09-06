@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { BarChart3, FileText, RefreshCw } from 'lucide-react';
+import { BarChart3, FileSpreadsheet, FileText, RefreshCw } from 'lucide-react';
 import type { Factura, ResumenDia } from '@panaderia/core';
-import { getFactura, resumenDia } from '../services/db';
+import { getFactura, guardarReporteExcel, resumenDia } from '../services/db';
 import { formatUsdCents } from '../lib/format';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -18,6 +18,8 @@ export default function ReportePage() {
   const [cargando, setCargando] = useState(true);
   const [factura, setFactura] = useState<Factura | null>(null);
   const [cargandoFactura, setCargandoFactura] = useState(false);
+  const [exportando, setExportando] = useState(false);
+  const [exportOk, setExportOk] = useState<string | null>(null);
 
   const cargar = (f: string) => {
     setCargando(true);
@@ -46,6 +48,51 @@ export default function ReportePage() {
     }
   };
 
+  const exportarExcel = async () => {
+    if (!dato) return;
+    setExportando(true);
+    setExportOk(null);
+    try {
+      const { default: ExcelJS } = await import('exceljs');
+      const wb = new ExcelJS.Workbook();
+      wb.created = new Date();
+      const ws = wb.addWorksheet('Reporte');
+
+      ws.addRow(['Kalientico — Reporte del día', fecha]).font = { bold: true, size: 14 };
+      ws.addRow([]);
+      ws.addRow(['Ventas entregadas', (totalVentas / 100).toFixed(2), 'US$']);
+      ws.addRow(['Ventas en Bs', (totalVentasBs / 100).toFixed(2), 'Bs']);
+      ws.addRow(['Efectivo US$', (dato.pagos_efectivo_usd / 100).toFixed(2), 'US$']);
+      ws.addRow(['Efectivo Bs', (dato.pagos_efectivo_ves / 100).toFixed(2), 'Bs']);
+      ws.addRow([]);
+
+      ws.addRow(['Ventas']).font = { bold: true };
+      ws.addRow(['Factura', 'Cliente', 'Tipo', 'Monto (US$)', 'Tasa']);
+      ventasEntregadas.forEach((v) =>
+        ws.addRow([v.numero_factura, v.cliente, v.tipo, (v.monto / 100).toFixed(2), v.tasa_cambio]),
+      );
+      ws.addRow([]);
+
+      ws.addRow(['Producción']).font = { bold: true };
+      ws.addRow(['Producto', 'Cantidad', 'Costo unit. (US$)']);
+      dato.producciones.forEach((m) => ws.addRow([m.producto, m.cantidad, (m.costo_unitario / 100).toFixed(2)]));
+
+      ws.columns.forEach((col) => {
+        if (col && typeof col.eachCell === 'function') col.width = 24;
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const contenido_b64 = arrayBufferABase64(buffer);
+      const ruta = await guardarReporteExcel(`reporte-${fecha}.xlsx`, contenido_b64);
+      setExportOk(`Reporte guardado en: ${ruta}`);
+    } catch (e) {
+      setExportOk(null);
+      window.alert(`No se pudo exportar el reporte: ${String(e)}`);
+    } finally {
+      setExportando(false);
+    }
+  };
+
   if (cargando && !dato) return <PageLoader />;
 
   return (
@@ -56,12 +103,24 @@ export default function ReportePage() {
         actions={
           <div className="flex items-center gap-2">
             <DatePicker value={fecha} onChange={setFecha} aria-label="Fecha del reporte" />
+            <Button
+              variant="secondary"
+              onClick={exportarExcel}
+              disabled={exportando || !dato}
+              aria-label="Exportar reporte a Excel"
+            >
+              <FileSpreadsheet className="h-4 w-4" /> {exportando ? 'Exportando…' : 'Excel'}
+            </Button>
             <Button variant="secondary" onClick={() => cargar(fecha)} aria-label="Recargar reporte">
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
         }
       />
+
+      {exportOk && (
+        <div className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{exportOk}</div>
+      )}
 
       {!dato ? (
         <Card>
@@ -160,4 +219,14 @@ function Stat({ label, valor }: { label: string; valor: string }) {
       <p className="mt-1 text-lg font-bold text-gray-900">{valor}</p>
     </div>
   );
+}
+
+function arrayBufferABase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binario = '';
+  const trozos = 0x8000;
+  for (let i = 0; i < bytes.length; i += trozos) {
+    binario += String.fromCharCode(...bytes.subarray(i, i + trozos));
+  }
+  return btoa(binario);
 }

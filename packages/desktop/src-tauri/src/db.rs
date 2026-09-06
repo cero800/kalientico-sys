@@ -9,7 +9,8 @@ use std::sync::Mutex;
 /// Versión actual del esquema (PRAGMA user_version).
 /// v2: moneda dual US$/Bs — ventas y pagos guardan `moneda` + snapshot `tasa_cambio`;
 ///     la caja pasa a arqueo independiente por moneda.
-pub const SCHEMA_VERSION: i64 = 2;
+/// v3: seguridad — usuarios con `pin` numérico y habilitación de roles admin/cajero.
+pub const SCHEMA_VERSION: i64 = 3;
 
 pub struct Db(pub Mutex<Connection>);
 
@@ -149,6 +150,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
     rol TEXT NOT NULL DEFAULT 'cajero',  -- admin|cajero
+    pin TEXT,                             -- PIN numérico de 4 dígitos
     activo INTEGER NOT NULL DEFAULT 1,
     creado_en DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -218,8 +220,32 @@ pub fn open(db_path: PathBuf, recrear_si_desactualizada: bool) -> Result<Connect
     }
 
     apply_schema(&conn)?;
+    apply_migrations(&conn)?;
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(conn)
+}
+
+/// Migraciones incrementales no destructivas (ALTER TABLE / UPDATE) para bases
+/// creadas con versiones anteriores del esquema.
+fn apply_migrations(conn: &Connection) -> Result<()> {
+    // v3: columna `pin` en usuarios.
+    let tiene_pin = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('usuarios') WHERE name = 'pin'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    if !tiene_pin {
+        conn.execute("ALTER TABLE usuarios ADD COLUMN pin TEXT", [])?;
+    }
+    // El admin pasa a tener PIN por defecto (1234) si no lo tenía.
+    conn.execute(
+        "UPDATE usuarios SET pin = ?2 WHERE rol = 'admin' AND (pin IS NULL OR pin = '')",
+        rusqlite::params!["1234"],
+    )?;
+    Ok(())
 }
 
 /// Ejecuta el bloque de creación de tablas (idempotente por IF NOT EXISTS).
@@ -230,9 +256,8 @@ fn apply_schema(conn: &Connection) -> Result<()> {
 /// True si existe la tabla `pedidos` (esquema antiguo) o si `user_version` no
 /// coincide con la versión actual y no hay tablas nuevas.
 fn hay_esquema_antiguo(conn: &Connection) -> Result<bool> {
-    let mut stmt = conn.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='pedidos'",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='pedidos'")?;
     let mut rows = stmt.query([])?;
     Ok(rows.next()?.is_some())
 }
@@ -259,7 +284,8 @@ fn reset_version(conn: &Connection) -> Result<()> {
 #[cfg(test)]
 pub fn test_conn() -> Connection {
     let conn = Connection::open_in_memory().expect("abrir bd en memoria");
-    conn.pragma_update(None, "foreign_keys", true).expect("enable fk");
+    conn.pragma_update(None, "foreign_keys", true)
+        .expect("enable fk");
     conn.execute_batch(SCHEMA).expect("aplicar esquema");
     conn
 }

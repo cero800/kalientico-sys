@@ -16,7 +16,7 @@ import { cn } from '../lib/cn';
 import { formatVesCents } from '../lib/format';
 import { Button } from './ui/Button';
 
-const nav: Array<{ to: string; label: string; icon: ReactNode }> = [
+const nav: Array<{ to: string; label: string; icon: ReactNode; soloAdmin?: boolean }> = [
   { to: '/venta', label: 'Venta', icon: <ShoppingCart className="h-4 w-4" /> },
   { to: '/productos', label: 'Productos', icon: <Package className="h-4 w-4" /> },
   { to: '/clientes', label: 'Clientes', icon: <Users className="h-4 w-4" /> },
@@ -24,8 +24,10 @@ const nav: Array<{ to: string; label: string; icon: ReactNode }> = [
   { to: '/reporte', label: 'Reporte', icon: <BarChart3 className="h-4 w-4" /> },
   { to: '/deudores', label: 'Deudores', icon: <Wallet className="h-4 w-4" /> },
   { to: '/cerrar-caja', label: 'Cerrar caja', icon: <Coins className="h-4 w-4" /> },
-  { to: '/config', label: 'Configuración', icon: <Settings className="h-4 w-4" /> },
+  { to: '/config', label: 'Configuración', icon: <Settings className="h-4 w-4" />, soloAdmin: true },
 ];
+
+const esAdmin = (rol?: string) => rol === 'admin';
 
 export default function Shell() {
   const navegar = useNavigate();
@@ -38,6 +40,8 @@ export default function Shell() {
     navegar('/login');
   };
 
+  const items = nav.filter((item) => !item.soloAdmin || esAdmin(operador?.rol));
+
   return (
     <div className="flex h-screen bg-gray-100">
       <aside className="flex w-56 shrink-0 flex-col border-r border-gray-200 bg-white">
@@ -47,7 +51,7 @@ export default function Shell() {
         </div>
 
         <nav className="flex-1 space-y-1 px-2 py-3">
-          {nav.map((item) => (
+          {items.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

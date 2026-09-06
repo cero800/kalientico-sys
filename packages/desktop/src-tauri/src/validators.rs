@@ -2,7 +2,7 @@
 // legible para el usuario. Un error nunca debe llegar a comprometer la BD.
 
 // Límites de seguridad (evitar input desmedido).
-pub const MAX_MONTO: i64 = 999_999_999_99; // 999,999,999.99 (centavos)
+pub const MAX_MONTO: i64 = 99_999_999_999; // 999,999,999.99 (centavos)
 pub const MAX_CANTIDAD: f64 = 1_000_000.0;
 
 /// Monto no atómico general (precio, subtotal, total, pago).
@@ -69,14 +69,18 @@ pub fn validar_tipo_pago(t: &str) -> Result<(), String> {
 /// Combina la regla de negocio entre tipo de pago y moneda:
 /// - En US$ el pago solo puede ser efectivo (divisas).
 /// - Pago móvil y punto requieren el número de referencia.
-pub fn validar_combinacion_pago(tipo: &str, moneda: &str, numero_referencia: Option<&str>) -> Result<(), String> {
+pub fn validar_combinacion_pago(
+    tipo: &str,
+    moneda: &str,
+    numero_referencia: Option<&str>,
+) -> Result<(), String> {
     if moneda == "usd" && tipo != "efectivo" {
         return Err("En US$ el pago debe ser en efectivo (divisas)".to_string());
     }
-    if tipo == "pago_movil" || tipo == "punto" {
-        if numero_referencia.map(|r| r.trim().is_empty()).unwrap_or(true) {
-            return Err("El pago móvil y punto requieren el número de referencia".to_string());
-        }
+    if (tipo == "pago_movil" || tipo == "punto")
+        && numero_referencia.is_none_or(|r| r.trim().is_empty())
+    {
+        return Err("El pago móvil y punto requieren el número de referencia".to_string());
     }
     Ok(())
 }
@@ -116,6 +120,15 @@ pub fn validar_rol(r: &str) -> Result<(), String> {
         "admin" | "cajero" => Ok(()),
         _ => Err(format!("Rol inválido: {r}")),
     }
+}
+
+/// PIN numérico de 4 dígitos.
+pub fn validar_pin(pin: &str) -> Result<(), String> {
+    let p = pin.trim();
+    if p.len() != 4 || !p.chars().all(|c| c.is_ascii_digit()) {
+        return Err("El PIN debe tener exactamente 4 dígitos".to_string());
+    }
+    Ok(())
 }
 
 /// Tipo de venta válido.

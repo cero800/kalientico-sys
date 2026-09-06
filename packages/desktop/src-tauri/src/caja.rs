@@ -4,7 +4,9 @@
 // el efectivo esperado y la diferencia se calculan por separado. El cierre NO
 // toca el stock (el inventario es acumulativo y persiste entre días).
 
-use crate::factura::{KEY_NEGOCIO_DIRECCION, KEY_NEGOCIO_NOMBRE, KEY_NEGOCIO_RIF, KEY_NEGOCIO_TELEFONO};
+use crate::factura::{
+    KEY_NEGOCIO_DIRECCION, KEY_NEGOCIO_NOMBRE, KEY_NEGOCIO_RIF, KEY_NEGOCIO_TELEFONO,
+};
 use crate::reporte::{get_config, resumen_dia};
 use crate::types::{Caja, CajaAbrirInput, CajaCerrarInput, CierreAbono, CierreDia};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -134,7 +136,10 @@ pub fn cerrar_caja(conn: &Connection, i: &CajaCerrarInput) -> Result<CierreDia, 
     let resumen = resumen_dia(conn, None)?;
     let ventas = resumen.ventas;
     let total_ventas_usd: i64 = ventas.iter().map(|v| v.monto).sum();
-    let total_ventas_bs: i64 = ventas.iter().map(|v| (v.monto as f64 * v.tasa_cambio).round() as i64).sum();
+    let total_ventas_bs: i64 = ventas
+        .iter()
+        .map(|v| (v.monto as f64 * v.tasa_cambio).round() as i64)
+        .sum();
 
     // Abonos a cuenta del día (todas las monedas y formas de pago).
     let mut abonos = Vec::new();
@@ -424,7 +429,12 @@ mod tests {
         )
         .unwrap();
 
-        crate::reporte::set_config(&conn, crate::factura::KEY_NEGOCIO_NOMBRE, "Panadería El Trigal").unwrap();
+        crate::reporte::set_config(
+            &conn,
+            crate::factura::KEY_NEGOCIO_NOMBRE,
+            "Panadería El Trigal",
+        )
+        .unwrap();
 
         let caja_id = caja_abierta(&conn).unwrap().unwrap().id;
         let cierre = cerrar_caja(

@@ -222,6 +222,16 @@ pub struct UsuarioInput {
     pub nombre: String,
     pub rol: String,
     pub activo: bool,
+    pub pin: Option<String>,
+}
+
+/// Información de una copia de seguridad de la base de datos.
+#[derive(Serialize)]
+pub struct BackupItem {
+    pub nombre: String,
+    pub ruta: String,
+    pub tamano_bytes: u64,
+    pub fecha: String,
 }
 
 // ---- Reporte / config ----
