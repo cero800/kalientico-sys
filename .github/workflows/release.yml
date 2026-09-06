@@ -22,7 +22,7 @@ jobs:
             platform: windows
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Dependencias del sistema (Linux)
         if: matrix.platform == 'linux'
@@ -34,9 +34,7 @@ jobs:
             libxdo-dev libssl-dev \
             libayatana-appindicator3-dev librsvg2-dev patchelf
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v4
         with:
