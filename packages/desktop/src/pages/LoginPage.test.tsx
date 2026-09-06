@@ -9,6 +9,7 @@ vi.mock('../services/db', () => ({
     { id: 1, nombre: 'Ana', rol: 'admin', activo: true },
     { id: 2, nombre: 'Luis', rol: 'cajero', activo: false },
   ]),
+  necesitaConfiguracion: vi.fn().mockResolvedValue(false),
   verificarPin: vi.fn().mockResolvedValue(true),
   cajaAbierta: vi.fn().mockResolvedValue(null),
   getTasaCambio: vi.fn().mockResolvedValue(36.85),

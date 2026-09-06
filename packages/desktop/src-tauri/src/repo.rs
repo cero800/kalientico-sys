@@ -632,6 +632,44 @@ pub fn seed_cliente_mostrador(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// True si no existe ningún administrador activo con PIN, es decir, la app
+/// necesita la primera configuración (crear/ajustar el admin y su clave).
+pub fn necesita_configuracion(conn: &Connection) -> Result<bool, String> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM usuarios \
+             WHERE activo = 1 AND rol = 'admin' AND pin IS NOT NULL AND pin != ''",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(count == 0)
+}
+
+/// Pantalla de primer arranque: garantiza un administrador activo con el nombre
+/// y PIN elegidos. Unifica el estado heredado de bases antiguas (se actualizan
+/// todos los admins activos); si no existe ninguno, crea uno nuevo.
+pub fn configurar_admin(conn: &Connection, nombre: &str, pin: &str) -> Result<(), String> {
+    if nombre.trim().is_empty() {
+        return Err("El nombre del administrador es obligatorio".to_string());
+    }
+    validators::validar_pin(pin)?;
+    let actualizados = conn
+        .execute(
+            "UPDATE usuarios SET nombre = ?1, pin = ?2, activo = 1 WHERE rol = 'admin'",
+            params![nombre.trim(), pin.trim()],
+        )
+        .map_err(|e| e.to_string())?;
+    if actualizados == 0 {
+        conn.execute(
+            "INSERT INTO usuarios (nombre, rol, activo, pin) VALUES (?1, 'admin', 1, ?2)",
+            params![nombre.trim(), pin.trim()],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
@@ -675,6 +713,37 @@ mod tests {
             )
             .unwrap();
         assert_eq!(nombre, "Consumidor Final");
+    }
+
+    #[test]
+    fn setup_repara_admin_activo_sin_pin() {
+        let conn = conn();
+        // Admin heredado de una base antigua, sin PIN.
+        conn.execute(
+            "INSERT INTO usuarios (nombre, rol, activo) VALUES ('Jefe', 'admin', 1)",
+            [],
+        )
+        .unwrap();
+        assert!(necesita_configuracion(&conn).unwrap());
+        configurar_admin(&conn, "Jefe", "9876").unwrap();
+        assert!(!necesita_configuracion(&conn).unwrap());
+        // El login con el PIN elegido funciona; un PIN ajeno no.
+        assert!(verificar_pin(&conn, 1, "9876").unwrap());
+        assert!(!verificar_pin(&conn, 1, "1234").unwrap());
+        let nombre: String = conn
+            .query_row("SELECT nombre FROM usuarios WHERE id=1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(nombre, "Jefe");
+    }
+
+    #[test]
+    fn setup_crea_admin_si_no_existe_ninguno() {
+        let conn = conn();
+        assert!(necesita_configuracion(&conn).unwrap());
+        configurar_admin(&conn, "Administrador", "4321").unwrap();
+        assert!(!necesita_configuracion(&conn).unwrap());
+        assert!(verificar_pin(&conn, 1, "4321").unwrap());
+        assert!(!verificar_pin(&conn, 1, "0000").unwrap());
     }
 
     #[test]

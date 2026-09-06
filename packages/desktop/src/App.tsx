@@ -6,6 +6,7 @@ import { useSesion } from './store/sesion';
 import { PageLoader } from './components/ui/Spinner';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+const SetupAdminPage = lazy(() => import('./pages/SetupAdminPage'));
 const AbrirCajaPage = lazy(() => import('./pages/AbrirCajaPage'));
 const VentaPage = lazy(() => import('./pages/VentaPage'));
 const ProductosPage = lazy(() => import('./pages/ProductosPage'));
@@ -26,6 +27,7 @@ export default function App() {
       <Suspense fallback={<PageLoader label="Cargando…" />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/setup" element={<SetupAdminPage />} />
           <Route element={<RequiereSesion />}>
             <Route path="/abrir-caja" element={<AbrirCajaPage />} />
             <Route element={<RequiereCaja />}>

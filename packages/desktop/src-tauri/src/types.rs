@@ -225,6 +225,13 @@ pub struct UsuarioInput {
     pub pin: Option<String>,
 }
 
+/// Datos del primer arranque: crear/ajustar el administrador y su PIN.
+#[derive(Deserialize)]
+pub struct ConfigurarAdminInput {
+    pub nombre: String,
+    pub pin: String,
+}
+
 /// Información de una copia de seguridad de la base de datos.
 #[derive(Serialize)]
 pub struct BackupItem {

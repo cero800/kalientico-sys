@@ -13,8 +13,8 @@ mod ventas;
 pub(crate) mod testutil;
 
 use crate::types::{
-    AbonoInput, CajaAbrirInput, CajaCerrarInput, EmpresaInput, PrecioClienteInput, ProductoInput,
-    UsuarioInput, VentaInput,
+    AbonoInput, CajaAbrirInput, CajaCerrarInput, ConfigurarAdminInput, EmpresaInput,
+    PrecioClienteInput, ProductoInput, UsuarioInput, VentaInput,
 };
 use db::Db;
 use rusqlite::Connection;
@@ -120,6 +120,18 @@ fn cambiar_pin(
     pin_nuevo: String,
 ) -> Result<(), String> {
     repo::cambiar_pin(&*lock(&state)?, usuario_id, &pin_actual, &pin_nuevo)
+}
+
+/// Primer arranque: true si falta crear/ajustar el administrador con su PIN.
+#[tauri::command]
+fn necesita_configuracion(state: State<'_, Db>) -> Result<bool, String> {
+    repo::necesita_configuracion(&*lock(&state)?)
+}
+
+/// Primer arranque: crea/ajusta el administrador y su PIN desde `/setup`.
+#[tauri::command]
+fn configurar_admin(state: State<'_, Db>, admin: ConfigurarAdminInput) -> Result<(), String> {
+    repo::configurar_admin(&*lock(&state)?, &admin.nombre, &admin.pin)
 }
 
 //---------------------------------------------------------------------------
@@ -461,6 +473,8 @@ pub fn run() {
             crear_usuario,
             verificar_pin,
             cambiar_pin,
+            necesita_configuracion,
+            configurar_admin,
             crear_backup,
             listar_backups,
             eliminar_backup,

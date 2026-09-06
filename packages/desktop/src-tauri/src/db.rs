@@ -326,7 +326,9 @@ mod tests {
         assert_eq!(tiene_pin, 1, "se debe agregar la columna pin");
 
         let pin: String = conn
-            .query_row("SELECT pin FROM usuarios WHERE rol='admin'", [], |r| r.get(0))
+            .query_row("SELECT pin FROM usuarios WHERE rol='admin'", [], |r| {
+                r.get(0)
+            })
             .expect("leer pin del admin");
         assert_eq!(pin, "1234", "el admin debe quedar con PIN por defecto");
     }

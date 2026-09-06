@@ -198,6 +198,12 @@ export interface UsuarioInput {
   activo: boolean;
 }
 
+/** Datos del primer arranque: crear/ajustar el administrador y su PIN. */
+export interface ConfigurarAdminInput {
+  nombre: string;
+  pin: string;
+}
+
 //---------------------------------------------------------------------------
 // Caja (arqueo por moneda)
 //---------------------------------------------------------------------------

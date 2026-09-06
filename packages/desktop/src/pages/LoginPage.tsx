@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CircleUserRound } from 'lucide-react';
 import type { Usuario } from '@panaderia/core';
-import { listarUsuarios, verificarPin } from '../services/db';
+import { listarUsuarios, necesitaConfiguracion, verificarPin } from '../services/db';
 import { useSesion } from '../store/sesion';
 import { Card } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
@@ -21,11 +21,19 @@ export default function LoginPage() {
   const [validando, setValidando] = useState(false);
 
   useEffect(() => {
-    listarUsuarios()
-      .then((u) => setUsuarios(u.filter((x) => x.activo)))
+    necesitaConfiguracion()
+      .then((necesitaSetup) => {
+        if (necesitaSetup) {
+          navegar('/setup', { replace: true });
+          return;
+        }
+        return listarUsuarios()
+          .then((u) => setUsuarios(u.filter((x) => x.activo)))
+          .catch((e) => setError(String(e)));
+      })
       .catch((e) => setError(String(e)))
       .finally(() => setCargando(false));
-  }, []);
+  }, [navegar]);
 
   const completarLogin = async (usuario: Usuario) => {
     await login(usuario);

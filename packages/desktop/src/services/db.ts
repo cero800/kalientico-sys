@@ -9,6 +9,7 @@ import type {
   CajaAbrirInput,
   CajaCerrarInput,
   CierreDia,
+  ConfigurarAdminInput,
   Empresa,
   EmpresaInput,
   EstadoCuenta,
@@ -33,6 +34,7 @@ export type {
   CajaCerrarInput,
   CierreAbono,
   CierreDia,
+  ConfigurarAdminInput,
   DetalleVentaInput,
   Empresa,
   EmpresaInput,
@@ -85,6 +87,11 @@ export const verificarPin = (usuario_id: number, pin: string) =>
 
 export const cambiarPin = (usuario_id: number, pin_actual: string, pin_nuevo: string) =>
   invoke<void>('cambiar_pin', { usuario_id, pin_actual, pin_nuevo });
+
+export const necesitaConfiguracion = () => invoke<boolean>('necesita_configuracion');
+
+export const configurarAdmin = (admin: ConfigurarAdminInput) =>
+  invoke<void>('configurar_admin', { admin });
 
 export interface BackupItem {
   nombre: string;
