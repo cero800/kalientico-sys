@@ -4,10 +4,6 @@
 > inventario, caja por moneda, deudores y reportes. Aplicación de escritorio
 > construida con **Tauri 2 + Rust + React**.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/cero800/kalientico-sys/ci.yml?branch=main&label=CI&logo=github)](https://github.com/cero800/kalientico-sys/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/cero800/kalientico-sys?logo=github)](https://github.com/cero800/kalientico-sys/releases)
-[![Licencia](https://img.shields.io/github/license/cero800/kalientico-sys)](./LICENSE)
-
 ## Funcionalidades
 
 - **Venta (POS)**: grid de productos, carrito, cobro mixto US$/Bs con
@@ -80,7 +76,8 @@ kalientico-sys/
 
 ## Puesta en marcha
 
-Requisitos: Node.js ≥ 18, pnpm ≥ 8, Rust estable y las dependencias de Tauri 2.
+Requisitos: Node.js ≥ 18, pnpm ≥ 10 (el monorepo se fija a `pnpm@11.24.0` vía `packageManager`),
+Rust estable y las dependencias de Tauri 2.
 
 ```bash
 # Dependencias e instalación
