@@ -68,7 +68,7 @@ pub fn validar_tipo_pago(t: &str) -> Result<(), String> {
 
 /// Combina la regla de negocio entre tipo de pago y moneda:
 /// - En US$ el pago solo puede ser efectivo (divisas).
-/// - Pago móvil y biopago requieren el número de referencia (el punto no).
+/// - Solo el pago móvil exige número de referencia (punto y biopago no).
 pub fn validar_combinacion_pago(
     tipo: &str,
     moneda: &str,
@@ -77,10 +77,8 @@ pub fn validar_combinacion_pago(
     if moneda == "usd" && tipo != "efectivo" {
         return Err("En US$ el pago debe ser en efectivo (divisas)".to_string());
     }
-    if (tipo == "pago_movil" || tipo == "biopago")
-        && numero_referencia.is_none_or(|r| r.trim().is_empty())
-    {
-        return Err("El pago móvil y biopago requieren el número de referencia".to_string());
+    if tipo == "pago_movil" && numero_referencia.is_none_or(|r| r.trim().is_empty()) {
+        return Err("El pago móvil requiere el número de referencia".to_string());
     }
     Ok(())
 }
@@ -185,18 +183,16 @@ mod tests {
     }
 
     #[test]
-    fn pago_movil_y_biopago_exigen_referencia_pero_punto_no() {
+    fn solo_pago_movil_exige_referencia() {
         let err = validar_combinacion_pago("pago_movil", "ves", None).unwrap_err();
         assert!(err.contains("referencia"), "{err}");
         let err = validar_combinacion_pago("pago_movil", "ves", Some("  ")).unwrap_err();
         assert!(err.contains("referencia"), "{err}");
-        let err = validar_combinacion_pago("biopago", "ves", None).unwrap_err();
-        assert!(err.contains("referencia"), "{err}");
-        let err = validar_combinacion_pago("biopago", "ves", Some("  ")).unwrap_err();
-        assert!(err.contains("referencia"), "{err}");
-        // El punto ya no exige número de referencia.
+        // Punto y biopago ya no exigen número de referencia.
         validar_combinacion_pago("punto", "ves", None).unwrap();
         validar_combinacion_pago("punto", "ves", Some("  ")).unwrap();
+        validar_combinacion_pago("biopago", "ves", None).unwrap();
+        validar_combinacion_pago("biopago", "ves", Some("  ")).unwrap();
     }
 
     #[test]

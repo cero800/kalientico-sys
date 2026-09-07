@@ -67,7 +67,7 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
 
   const todosMontosValidos = pagos.every((p) => p.monto.trim() === '' || parseCentsInput(p.monto, p.moneda) !== null);
   const referenciaFaltante = pagos.some(
-    (p) => (p.tipo_pago === 'pago_movil' || p.tipo_pago === 'biopago') && p.numero_referencia.trim() === '',
+    (p) => p.tipo_pago === 'pago_movil' && p.numero_referencia.trim() === '',
   );
   const puedeConfirmar =
     !guardando &&
@@ -185,7 +185,7 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
                     error={p.monto.trim() !== '' && parseCentsInput(p.monto, p.moneda) === null ? 'Monto no válido' : undefined}
                   />
                 </div>
-                {(p.tipo_pago === 'pago_movil' || p.tipo_pago === 'biopago') && (
+                {p.tipo_pago === 'pago_movil' && (
                   <div className="flex-1">
                     <Input
                       aria-label={`Referencia pago ${i + 1}`}
@@ -256,7 +256,7 @@ export default function CobroModal({ abre, total, clienteId, sePermiteCredito, o
                 </p>
               )}
               {referenciaFaltante && (
-                <p className="text-xs text-red-600">El pago móvil y biopago requieren el número de referencia</p>
+                <p className="text-xs text-red-600">El pago móvil requiere el número de referencia</p>
               )}
             </>
           )}

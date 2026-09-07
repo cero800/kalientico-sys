@@ -117,7 +117,7 @@ describe('CobroModal', () => {
     ]);
   });
 
-  it('exige referencia en pago móvil y biopago, no en punto', async () => {
+  it('exige referencia solo en pago móvil, no en punto ni biopago', async () => {
     const user = userEvent.setup();
     renderModal();
     const pagos = screen.getAllByLabelText(/Monto pago/);
@@ -133,10 +133,10 @@ describe('CobroModal', () => {
     expect(screen.queryByText(/número de referencia/i)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar venta' })).not.toBeDisabled();
 
-    // El biopago sí la exige.
+    // El biopago tampoco la exige (es el mismo punto).
     await user.selectOptions(screen.getAllByLabelText(/Tipo pago/)[0], 'biopago');
-    expect(screen.getByText(/número de referencia/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Confirmar venta' })).toBeDisabled();
+    expect(screen.queryByText(/número de referencia/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar venta' })).not.toBeDisabled();
     expect(onConfirmar).not.toHaveBeenCalled();
   });
 
@@ -156,20 +156,20 @@ describe('CobroModal', () => {
     ]);
   });
 
-  it('acepta biopago en Bs con referencia', async () => {
+  it('acepta biopago en Bs sin número de referencia', async () => {
     const user = userEvent.setup();
     renderModal();
     const pagos = screen.getAllByLabelText(/Monto pago/);
     await user.selectOptions(screen.getAllByLabelText(/Moneda pago/)[0], 'ves');
     await user.selectOptions(screen.getAllByLabelText(/Tipo pago/)[0], 'biopago');
     await user.type(pagos[0], '368,50');
-    await user.type(screen.getByLabelText(/Referencia pago/), 'BIO-01');
+    expect(screen.queryByLabelText(/Referencia pago/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Confirmar venta' }));
 
     const venta = onConfirmar.mock.calls[0][0];
     expect(venta.pagos).toEqual([
-      { monto: 36850, tipo_pago: 'biopago', moneda: 'ves', numero_referencia: 'BIO-01' },
+      { monto: 36850, tipo_pago: 'biopago', moneda: 'ves', numero_referencia: undefined },
     ]);
   });
 
