@@ -145,13 +145,11 @@ pub struct EstadoCuenta {
 }
 
 /// Abono a cuenta de un cliente (sin vincular a una factura concreta).
+/// Admite varios pagos (mixtos) que en conjunto no superan el saldo pendiente.
 #[derive(Deserialize)]
 pub struct AbonoInput {
     pub empresa_id: i64,
-    pub monto: i64,
-    pub tipo_pago: String,
-    pub moneda: String,
-    pub numero_referencia: Option<String>,
+    pub pagos: Vec<PagoInput>,
     pub operador_id: i64,
 }
 

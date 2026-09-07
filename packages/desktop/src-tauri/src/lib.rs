@@ -229,7 +229,7 @@ fn estado_cuenta_todos(state: State<'_, Db>) -> Result<Vec<types::EstadoCuenta>,
 
 #[tauri::command]
 fn registrar_abono(state: State<'_, Db>, abono: AbonoInput) -> Result<(), String> {
-    pagos::registrar_abono(&*lock(&state)?, &abono)
+    pagos::registrar_abono(&mut *lock(&state)?, &abono)
 }
 
 #[tauri::command(rename_all = "snake_case")]

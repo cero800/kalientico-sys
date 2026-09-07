@@ -117,7 +117,7 @@ describe('CobroModal', () => {
     ]);
   });
 
-  it('exige referencia en pago móvil y punto', async () => {
+  it('exige referencia en pago móvil y biopago, no en punto', async () => {
     const user = userEvent.setup();
     renderModal();
     const pagos = screen.getAllByLabelText(/Monto pago/);
@@ -127,7 +127,50 @@ describe('CobroModal', () => {
 
     expect(screen.getByText(/número de referencia/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar venta' })).toBeDisabled();
+
+    // El punto ya no exige referencia.
+    await user.selectOptions(screen.getAllByLabelText(/Tipo pago/)[0], 'punto');
+    expect(screen.queryByText(/número de referencia/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar venta' })).not.toBeDisabled();
+
+    // El biopago sí la exige.
+    await user.selectOptions(screen.getAllByLabelText(/Tipo pago/)[0], 'biopago');
+    expect(screen.getByText(/número de referencia/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar venta' })).toBeDisabled();
     expect(onConfirmar).not.toHaveBeenCalled();
+  });
+
+  it('acepta punto sin número de referencia', async () => {
+    const user = userEvent.setup();
+    renderModal();
+    const pagos = screen.getAllByLabelText(/Monto pago/);
+    await user.selectOptions(screen.getAllByLabelText(/Moneda pago/)[0], 'ves');
+    await user.selectOptions(screen.getAllByLabelText(/Tipo pago/)[0], 'punto');
+    await user.type(pagos[0], '368,50');
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar venta' }));
+
+    const venta = onConfirmar.mock.calls[0][0];
+    expect(venta.pagos).toEqual([
+      { monto: 36850, tipo_pago: 'punto', moneda: 'ves', numero_referencia: undefined },
+    ]);
+  });
+
+  it('acepta biopago en Bs con referencia', async () => {
+    const user = userEvent.setup();
+    renderModal();
+    const pagos = screen.getAllByLabelText(/Monto pago/);
+    await user.selectOptions(screen.getAllByLabelText(/Moneda pago/)[0], 'ves');
+    await user.selectOptions(screen.getAllByLabelText(/Tipo pago/)[0], 'biopago');
+    await user.type(pagos[0], '368,50');
+    await user.type(screen.getByLabelText(/Referencia pago/), 'BIO-01');
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar venta' }));
+
+    const venta = onConfirmar.mock.calls[0][0];
+    expect(venta.pagos).toEqual([
+      { monto: 36850, tipo_pago: 'biopago', moneda: 'ves', numero_referencia: 'BIO-01' },
+    ]);
   });
 
   it('en US$ solo permite efectivo', async () => {

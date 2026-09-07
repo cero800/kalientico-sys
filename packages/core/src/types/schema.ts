@@ -9,7 +9,7 @@ export const MONEDAS: readonly Moneda[] = ['usd', 'ves'];
 
 // Tipos de venta y pago (enumerados cerrados en el backend).
 export type TipoVenta = 'contado' | 'credito';
-export type TipoPago = 'efectivo' | 'pago_movil' | 'punto';
+export type TipoPago = 'efectivo' | 'pago_movil' | 'punto' | 'biopago';
 export type Rol = 'admin' | 'cajero';
 export type UnidadMedida = 'unidad' | 'kg' | 'paquete' | 'bandeja' | 'caja';
 export type EstadoCaja = 'abierta' | 'cerrada';
@@ -20,6 +20,7 @@ export const TIPO_PAGO_LABELS: Record<TipoPago, string> = {
   efectivo: 'Efectivo',
   pago_movil: 'Pago móvil',
   punto: 'Punto de venta',
+  biopago: 'Biopago',
 };
 
 // Claves de configuración de los datos del negocio que encabezan las facturas.
@@ -154,10 +155,7 @@ export interface Venta {
 
 export interface AbonoInput {
   empresa_id: number;
-  monto: number;
-  tipo_pago: TipoPago;
-  moneda: Moneda;
-  numero_referencia?: string;
+  pagos: PagoInput[];
   operador_id: number;
 }
 

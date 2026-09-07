@@ -45,31 +45,75 @@ describe('DeudoresPage', () => {
     await user.click(await screen.findByRole('button', { name: /Abono/ }));
 
     const dialog = screen.getByRole('dialog');
-    await user.type(within(dialog).getByLabelText(/Monto/), '100');
+    await user.type(within(dialog).getByLabelText(/Monto abono 1/), '100');
     await user.click(within(dialog).getByRole('button', { name: 'Guardar abono' }));
 
     expect(registrarAbono).toHaveBeenCalledWith({
       empresa_id: 2,
-      monto: 10000,
-      tipo_pago: 'efectivo',
-      moneda: 'ves',
-      numero_referencia: undefined,
+      pagos: [{ monto: 10000, tipo_pago: 'efectivo', moneda: 'ves', numero_referencia: undefined }],
+      operador_id: 1,
+    });
+  });
+
+  it('registra un abono mixto de varias formas de pago', async () => {
+    const user = userEvent.setup();
+    vi.mocked(registrarAbono).mockResolvedValue(undefined as never);
+    useSesion.setState({ operador: { id: 1, nombre: 'Ana', rol: 'admin', activo: true }, tasa: 36.85 });
+    render(<DeudoresPage />);
+    await user.click(await screen.findByText('Café del Centro'));
+    await user.click(await screen.findByRole('button', { name: /Abono/ }));
+
+    const dialog = screen.getByRole('dialog');
+    // Efectivo US$ $5 en la primera línea.
+    await user.selectOptions(within(dialog).getByLabelText(/Moneda abono 1/), 'usd');
+    await user.type(within(dialog).getByLabelText(/Monto abono 1/), '5');
+
+    // Pago móvil Bs (= $5) con referencia en la segunda línea.
+    await user.click(within(dialog).getByRole('button', { name: /Agregar pago/ }));
+    await user.selectOptions(within(dialog).getByLabelText(/Tipo abono 2/), 'pago_movil');
+    await user.type(within(dialog).getByLabelText(/Monto abono 2/), '184,25');
+    await user.type(within(dialog).getByLabelText(/Referencia abono 2/), 'R-001');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar abono' }));
+
+    expect(registrarAbono).toHaveBeenCalledWith({
+      empresa_id: 2,
+      pagos: [
+        { monto: 500, tipo_pago: 'efectivo', moneda: 'usd', numero_referencia: undefined },
+        { monto: 18425, tipo_pago: 'pago_movil', moneda: 'ves', numero_referencia: 'R-001' },
+      ],
       operador_id: 1,
     });
   });
 
   it('exige referencia en pagos móviles', async () => {
     const user = userEvent.setup();
+    useSesion.setState({ operador: { id: 1, nombre: 'Ana', rol: 'admin', activo: true }, tasa: 1 });
     render(<DeudoresPage />);
     await user.click(await screen.findByText('Café del Centro'));
     await user.click(await screen.findByRole('button', { name: /Abono/ }));
 
     const dialog = screen.getByRole('dialog');
-    await user.selectOptions(within(dialog).getByLabelText(/Tipo de pago/), 'pago_movil');
-    await user.type(within(dialog).getByLabelText(/Monto/), '100');
+    await user.selectOptions(within(dialog).getByLabelText(/Tipo abono 1/), 'pago_movil');
+    await user.type(within(dialog).getByLabelText(/Monto abono 1/), '100');
     await user.click(within(dialog).getByRole('button', { name: 'Guardar abono' }));
 
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('referencia');
+    expect(within(dialog).getByText(/pago móvil requiere el número de referencia/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Guardar abono' })).toBeDisabled();
+    expect(registrarAbono).not.toHaveBeenCalled();
+  });
+
+  it('bloquea el abono que supera el saldo pendiente', async () => {
+    const user = userEvent.setup();
+    useSesion.setState({ operador: { id: 1, nombre: 'Ana', rol: 'admin', activo: true }, tasa: 1 });
+    render(<DeudoresPage />);
+    await user.click(await screen.findByText('Café del Centro'));
+    await user.click(await screen.findByRole('button', { name: /Abono/ }));
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/Monto abono 1/), '300');
+    expect(within(dialog).getByText(/supera el saldo pendiente/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Guardar abono' })).toBeDisabled();
     expect(registrarAbono).not.toHaveBeenCalled();
   });
 
@@ -81,12 +125,26 @@ describe('DeudoresPage', () => {
     await user.click(await screen.findByRole('button', { name: /Abono/ }));
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('Debe (saldo pendiente)')).toBeInTheDocument();
+    expect(within(dialog).getByText('Debe (saldo)')).toBeInTheDocument();
+    expect(within(dialog).getByText('Facturado')).toBeInTheDocument();
+    expect(within(dialog).getByText('Queda tras este abono')).toBeInTheDocument();
     expect(within(dialog).getAllByText('$200.00')).toHaveLength(2);
     expect(within(dialog).getAllByText('Bs 200,00')).toHaveLength(2);
 
-    await user.type(within(dialog).getByLabelText(/Monto/), '50');
+    await user.type(within(dialog).getByLabelText(/Monto abono 1/), '50');
     expect(within(dialog).getByText('$150.00')).toBeInTheDocument();
     expect(within(dialog).getByText('Bs 150,00')).toBeInTheDocument();
+  });
+
+  it('rellena el saldo restante con el botón Abonar restante', async () => {
+    const user = userEvent.setup();
+    useSesion.setState({ operador: { id: 1, nombre: 'Ana', rol: 'admin', activo: true }, tasa: 1 });
+    render(<DeudoresPage />);
+    await user.click(await screen.findByText('Café del Centro'));
+    await user.click(await screen.findByRole('button', { name: /Abono/ }));
+
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Abonar restante' }));
+    expect(within(dialog).getByLabelText(/Monto abono 1/)).toHaveValue('200,00');
   });
 });

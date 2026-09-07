@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS detalle_ventas (
 );
 
 -- ============================ PAGOS ============================
--- tipo_pago: efectivo | pago_movil | punto (validado en el backend)
+-- tipo_pago: efectivo | pago_movil | punto | biopago (validado en el backend)
 -- venta_id NULL = abono a cuenta (sin factura específica)
 -- monto en centavos DE LA MONEDA DEL PAGO; moneda + tasa_cambio (snapshot)
 -- permiten convertir a US$ y por tanto cobros con varias líneas de pago.

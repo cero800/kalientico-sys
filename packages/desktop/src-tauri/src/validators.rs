@@ -61,14 +61,14 @@ pub fn validar_descuento(descuento: i64, subtotal: i64) -> Result<(), String> {
 /// Tipo de pago en el enumerado cerrado.
 pub fn validar_tipo_pago(t: &str) -> Result<(), String> {
     match t {
-        "efectivo" | "pago_movil" | "punto" => Ok(()),
+        "efectivo" | "pago_movil" | "punto" | "biopago" => Ok(()),
         _ => Err(format!("Tipo de pago inválido: {t}")),
     }
 }
 
 /// Combina la regla de negocio entre tipo de pago y moneda:
 /// - En US$ el pago solo puede ser efectivo (divisas).
-/// - Pago móvil y punto requieren el número de referencia.
+/// - Pago móvil y biopago requieren el número de referencia (el punto no).
 pub fn validar_combinacion_pago(
     tipo: &str,
     moneda: &str,
@@ -77,10 +77,10 @@ pub fn validar_combinacion_pago(
     if moneda == "usd" && tipo != "efectivo" {
         return Err("En US$ el pago debe ser en efectivo (divisas)".to_string());
     }
-    if (tipo == "pago_movil" || tipo == "punto")
+    if (tipo == "pago_movil" || tipo == "biopago")
         && numero_referencia.is_none_or(|r| r.trim().is_empty())
     {
-        return Err("El pago móvil y punto requieren el número de referencia".to_string());
+        return Err("El pago móvil y biopago requieren el número de referencia".to_string());
     }
     Ok(())
 }
@@ -162,6 +162,7 @@ mod tests {
         validar_tipo_pago("efectivo").unwrap();
         validar_tipo_pago("pago_movil").unwrap();
         validar_tipo_pago("punto").unwrap();
+        validar_tipo_pago("biopago").unwrap();
         assert!(validar_tipo_pago("transferencia").is_err());
         assert!(validar_tipo_pago("cheque").is_err());
         assert!(validar_tipo_pago("mixto").is_err());
@@ -172,17 +173,30 @@ mod tests {
         validar_combinacion_pago("efectivo", "usd", None).unwrap();
         let err = validar_combinacion_pago("pago_movil", "usd", Some("REF1")).unwrap_err();
         assert!(err.contains("US$"), "{err}");
+        let err = validar_combinacion_pago("biopago", "usd", Some("REF1")).unwrap_err();
+        assert!(err.contains("US$"), "{err}");
+        let err = validar_combinacion_pago("punto", "usd", Some("REF2")).unwrap_err();
+        assert!(err.contains("US$"), "{err}");
         validar_combinacion_pago("pago_movil", "ves", Some("REF1")).unwrap();
+        validar_combinacion_pago("biopago", "ves", Some("REF3")).unwrap();
         validar_combinacion_pago("punto", "ves", Some("REF2")).unwrap();
+        validar_combinacion_pago("punto", "ves", None).unwrap();
         validar_combinacion_pago("efectivo", "ves", None).unwrap();
     }
 
     #[test]
-    fn pago_movil_y_punto_exigen_referencia() {
+    fn pago_movil_y_biopago_exigen_referencia_pero_punto_no() {
         let err = validar_combinacion_pago("pago_movil", "ves", None).unwrap_err();
         assert!(err.contains("referencia"), "{err}");
-        let err = validar_combinacion_pago("punto", "ves", Some("  ")).unwrap_err();
+        let err = validar_combinacion_pago("pago_movil", "ves", Some("  ")).unwrap_err();
         assert!(err.contains("referencia"), "{err}");
+        let err = validar_combinacion_pago("biopago", "ves", None).unwrap_err();
+        assert!(err.contains("referencia"), "{err}");
+        let err = validar_combinacion_pago("biopago", "ves", Some("  ")).unwrap_err();
+        assert!(err.contains("referencia"), "{err}");
+        // El punto ya no exige número de referencia.
+        validar_combinacion_pago("punto", "ves", None).unwrap();
+        validar_combinacion_pago("punto", "ves", Some("  ")).unwrap();
     }
 
     #[test]

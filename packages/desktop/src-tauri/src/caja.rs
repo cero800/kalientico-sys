@@ -280,6 +280,20 @@ mod tests {
         }
     }
 
+    fn venta_credito(eid: i64, pid: i64, uid: i64) -> VentaInput {
+        VentaInput {
+            empresa_id: eid,
+            tipo: "credito".into(),
+            descuento: 0,
+            detalles: vec![DetalleVentaInput {
+                producto_id: pid,
+                cantidad: 1.0,
+            }],
+            pagos: vec![],
+            operador_id: uid,
+        }
+    }
+
     fn venta_ves(eid: i64, pid: i64, uid: i64) -> VentaInput {
         VentaInput {
             empresa_id: eid,
@@ -402,28 +416,36 @@ mod tests {
         let eid = empresa(&conn);
         let pid = producto(&conn, 10_00);
         stock(&conn, pid, 20.0);
+        let pid2 = producto(&conn, 5_00);
+        stock(&conn, pid2, 20.0);
 
-        crate::ventas::crear_venta(&mut conn, &venta_usd(eid, pid, uid)).unwrap();
+        // Deudas a crédito por $10 y $5 → el cliente debe $15.
+        crate::ventas::crear_venta(&mut conn, &venta_credito(eid, pid, uid)).unwrap();
+        crate::ventas::crear_venta(&mut conn, &venta_credito(eid, pid2, uid)).unwrap();
         crate::pagos::registrar_abono(
-            &conn,
+            &mut conn,
             &crate::types::AbonoInput {
                 empresa_id: eid,
-                monto: 36_850, // Bs 368.50 en efectivo (= $10)
-                tipo_pago: "efectivo".into(),
-                moneda: "ves".into(),
-                numero_referencia: None,
+                pagos: vec![crate::types::PagoInput {
+                    monto: 36_850, // Bs 368.50 en efectivo (= $10)
+                    tipo_pago: "efectivo".into(),
+                    moneda: "ves".into(),
+                    numero_referencia: None,
+                }],
                 operador_id: uid,
             },
         )
         .unwrap();
         crate::pagos::registrar_abono(
-            &conn,
+            &mut conn,
             &crate::types::AbonoInput {
                 empresa_id: eid,
-                monto: 18_425, // Bs 184.25 = $5 en pago móvil
-                tipo_pago: "pago_movil".into(),
-                moneda: "ves".into(),
-                numero_referencia: Some("123".into()),
+                pagos: vec![crate::types::PagoInput {
+                    monto: 18_425, // Bs 184.25 = $5 en pago móvil
+                    tipo_pago: "pago_movil".into(),
+                    moneda: "ves".into(),
+                    numero_referencia: Some("123".into()),
+                }],
                 operador_id: uid,
             },
         )
