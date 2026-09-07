@@ -68,7 +68,6 @@ export interface Producto {
   descripcion: string | null;
   unidad_medida: UnidadMedida;
   precio_base: number;
-  precio_mayoreo: number;
   activo: boolean;
   creado_en: string | null;
 }
@@ -79,7 +78,6 @@ export interface ProductoInput {
   descripcion?: string;
   unidad_medida: UnidadMedida;
   precio_base: number;
-  precio_mayoreo: number;
   activo: boolean;
 }
 
@@ -165,6 +163,9 @@ export interface EstadoCuenta {
   total_facturado: number;
   total_pagado: number;
   saldo_pendiente: number;
+  total_vencido: number;
+  total_al_dia: number;
+  dias_credito: number;
 }
 
 export interface PagoLinea {

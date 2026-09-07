@@ -7,6 +7,8 @@ import { useSesion } from '../store/sesion';
 import { formatUsdCents, formatVesCents } from '../lib/format';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Modal } from '../components/ui/Modal';
 import { PageLoader } from '../components/ui/Spinner';
 import { FacturaModal } from '../components/ui/FacturaModal';
 import { ProductoCard } from './venta/ProductoCard';
@@ -28,6 +30,8 @@ export default function VentaPage() {
   const [cargando, setCargando] = useState(true);
   const [cobroAbierto, setCobroAbierto] = useState(false);
   const [factura, setFactura] = useState<Factura | null>(null);
+  const [cantidadPara, setCantidadPara] = useState<Producto | null>(null);
+  const [cantidad, setCantidad] = useState('1');
 
   const lineas = useCarrito((s) => s.lineas);
   const agregar = useCarrito((s) => s.agregar);
@@ -68,8 +72,26 @@ export default function VentaPage() {
 
   const subtotal = useMemo(() => lineas.reduce((acc, l) => acc + Math.round(l.precio * l.cantidad), 0), [lineas]);
 
-  const agregarProducto = (p: Producto) => {
-    agregar({ producto_id: p.id, codigo: p.codigo, nombre: p.nombre, unidad: p.unidad_medida, precio: efectivoDe(p), cantidad: 1 });
+  const abrirCantidad = (p: Producto) => {
+    setCantidadPara(p);
+    setCantidad('1');
+  };
+
+  const confirmarCantidad = () => {
+    if (!cantidadPara) return;
+    const n = Math.floor(Number(cantidad));
+    if (Number.isFinite(n) && n > 0) {
+      const p = cantidadPara;
+      agregar({
+        producto_id: p.id,
+        codigo: p.codigo,
+        nombre: p.nombre,
+        unidad: p.unidad_medida,
+        precio: efectivoDe(p),
+        cantidad: n,
+      });
+    }
+    setCantidadPara(null);
   };
 
   const confirmarVenta = async (venta: VentaInput) => {
@@ -82,6 +104,18 @@ export default function VentaPage() {
       setFactura(null);
     }
   };
+
+  const cantidadNum = cantidadPara ? Math.floor(Number(cantidad)) : 0;
+  const stockDisponible = cantidadPara ? (stock[cantidadPara.id] ?? Infinity) : Infinity;
+  const cantidadValida = Number.isFinite(cantidadNum) && cantidadNum > 0 && cantidadNum <= stockDisponible;
+  const cantidadError =
+    cantidadPara && cantidad.trim() !== ''
+      ? !Number.isFinite(cantidadNum) || cantidadNum <= 0
+        ? 'Ingresa una cantidad válida'
+        : cantidadNum > stockDisponible
+          ? `Solo hay ${stock[cantidadPara.id]} disponibles`
+          : undefined
+      : undefined;
 
   if (cargando) return <PageLoader />;
 
@@ -117,7 +151,7 @@ export default function VentaPage() {
                 codigo={p.codigo}
                 precio={efectivoDe(p)}
                 stock={stock[p.id]}
-                onAgregar={() => agregarProducto(p)}
+                onAgregar={() => abrirCantidad(p)}
                 deshabilitado={(stock[p.id] ?? Infinity) <= 0}
               />
             ))}
@@ -199,7 +233,7 @@ export default function VentaPage() {
           <div className="border-t border-gray-100 px-3 py-3">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm text-gray-500">Total</span>
-              <strong className="text-xl text-gray-900">{formatUsdCents(subtotal)}</strong>
+              <strong className="text-xl text-gray-900" data-testid="total-usd">{formatUsdCents(subtotal)}</strong>
             </div>
             {subtotal > 0 && (
               <p className="mb-2 text-xs text-gray-500" data-testid="total-bs">
@@ -223,6 +257,50 @@ export default function VentaPage() {
           onConfirmar={confirmarVenta}
         />
       )}
+
+      {/* Pide la cantidad al agregar un producto */}
+      <Modal
+        open={cantidadPara != null}
+        title={cantidadPara ? `Agregar ${cantidadPara.nombre}` : 'Agregar producto'}
+        onClose={() => setCantidadPara(null)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCantidadPara(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmarCantidad} disabled={!cantidadValida}>
+              Agregar
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {cantidadPara && (
+            <p className="text-sm text-gray-600">
+              Precio unitario <strong>{formatUsdCents(efectivoDe(cantidadPara))}</strong>
+              {stock[cantidadPara.id] != null && (
+                <span className="ml-2 text-xs text-gray-400">Disponible: {stock[cantidadPara.id]}</span>
+              )}
+            </p>
+          )}
+          <Input
+            autoFocus
+            label="Cantidad"
+            value={cantidad}
+            onChange={(e) => setCantidad(e.target.value)}
+            inputMode="numeric"
+            error={cantidadError}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && cantidadValida) confirmarCantidad();
+            }}
+          />
+          {cantidadPara && cantidadValida && (
+            <p className="text-xs text-gray-500">
+              Total: <strong>{formatUsdCents(Math.round(efectivoDe(cantidadPara) * Number(cantidad)))}</strong>
+            </p>
+          )}
+        </div>
+      </Modal>
 
       {/* Factura de la venta recién registrada */}
       <FacturaModal factura={factura} onClose={() => setFactura(null)} />

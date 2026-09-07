@@ -2,6 +2,8 @@
 // El saldo pendiente SIEMPRE se deriva (SUM(ventas) - SUM(pagos)) — nunca se
 // guarda — para que no se desincronice. Admite abonos a cuenta (sin factura).
 
+use std::collections::HashMap;
+
 use crate::repo;
 use crate::types::{AbonoInput, EstadoCuenta, PagoLinea};
 use crate::validators;
@@ -11,15 +13,15 @@ use rusqlite::{params, Connection, OptionalExtension};
 /// El total facturado es en US$ (base); los pagos (que pueden ser en Bs) se
 /// convierten a US$ usando la tasa congelada de CADA pago.
 pub fn estado_cuenta(conn: &Connection, empresa_id: i64) -> Result<EstadoCuenta, String> {
-    let nombre: Option<String> = conn
+    let (nombre, dias_credito): (String, i64) = conn
         .query_row(
-            "SELECT nombre_comercial FROM empresas WHERE id = ?1 AND activo = 1",
+            "SELECT nombre_comercial, dias_credito FROM empresas WHERE id = ?1 AND activo = 1",
             params![empresa_id],
-            |r| r.get(0),
+            |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .optional()
-        .map_err(|e| e.to_string())?;
-    let nombre = nombre.ok_or("Empresa no encontrada")?;
+        .map_err(|e| e.to_string())?
+        .ok_or("Empresa no encontrada")?;
 
     let (facturado, pagado_f): (i64, f64) = conn
         .query_row(
@@ -33,13 +35,18 @@ pub fn estado_cuenta(conn: &Connection, empresa_id: i64) -> Result<EstadoCuenta,
         )
         .map_err(|e| e.to_string())?;
     let pagado = pagado_f.round() as i64;
+    let saldo = facturado - pagado;
+    let vencido = vencido_fifo(conn, empresa_id, dias_credito, pagado)?;
 
     Ok(EstadoCuenta {
         empresa_id,
         nombre_comercial: nombre,
         total_facturado: facturado,
         total_pagado: pagado,
-        saldo_pendiente: facturado - pagado,
+        saldo_pendiente: saldo,
+        total_vencido: vencido,
+        total_al_dia: saldo - vencido,
+        dias_credito,
     })
 }
 
@@ -48,7 +55,7 @@ pub fn estado_cuenta(conn: &Connection, empresa_id: i64) -> Result<EstadoCuenta,
 pub fn estado_cuenta_todos(conn: &Connection) -> Result<Vec<EstadoCuenta>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT e.id, e.nombre_comercial,
+            "SELECT e.id, e.nombre_comercial, e.dias_credito,
                     COALESCE((SELECT SUM(total) FROM ventas WHERE empresa_id = e.id AND estado='entregada'), 0) as fact,
                     COALESCE((SELECT SUM(CASE WHEN moneda = 'usd' THEN monto
                                               ELSE monto / tasa_cambio END)
@@ -56,22 +63,117 @@ pub fn estado_cuenta_todos(conn: &Connection) -> Result<Vec<EstadoCuenta>, Strin
              FROM empresas e WHERE e.activo = 1 ORDER BY (fact - pag) DESC",
         )
         .map_err(|e| e.to_string())?;
-    let rows = stmt
+    let filas = stmt
         .query_map([], |r| {
-            let fact: i64 = r.get(2)?;
-            let pag_f: f64 = r.get(3)?;
-            let pag = pag_f.round() as i64;
-            Ok(EstadoCuenta {
-                empresa_id: r.get(0)?,
-                nombre_comercial: r.get(1)?,
-                total_facturado: fact,
-                total_pagado: pag,
-                saldo_pendiente: fact - pag,
-            })
+            let fact: i64 = r.get(3)?;
+            let pag_f: f64 = r.get(4)?;
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, i64>(2)?,
+                fact,
+                pag_f.round() as i64,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut ventas: HashMap<i64, Vec<(i64, bool)>> = HashMap::new();
+    let mut stmt2 = conn
+        .prepare(
+            "SELECT v.empresa_id, v.total,
+                    (date('now') <= date(v.fecha, '+' || e.dias_credito || ' days'))
+             FROM ventas v JOIN empresas e ON e.id = v.empresa_id
+             WHERE v.estado = 'entregada' AND e.activo = 1
+             ORDER BY v.empresa_id, v.fecha ASC, v.id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows2 = stmt2
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, bool>(2)?,
+            ))
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<rusqlite::Result<Vec<EstadoCuenta>>>()
-        .map_err(|e| e.to_string())
+    for v in rows2 {
+        let (eid, total, en_plazo) = v.map_err(|e| e.to_string())?;
+        ventas.entry(eid).or_default().push((total, en_plazo));
+    }
+
+    Ok(filas
+        .into_iter()
+        .map(|(empresa_id, nombre_comercial, dias_credito, fact, pag)| {
+            let saldo = fact - pag;
+            let vencido = calcular_vencido(
+                ventas.get(&empresa_id).map(Vec::as_slice).unwrap_or(&[]),
+                pag,
+            );
+            EstadoCuenta {
+                empresa_id,
+                nombre_comercial,
+                total_facturado: fact,
+                total_pagado: pag,
+                saldo_pendiente: saldo,
+                total_vencido: vencido,
+                total_al_dia: saldo - vencido,
+                dias_credito,
+            }
+        })
+        .collect())
+}
+
+/// Vencido de un solo cliente (para `estado_cuenta`).
+/// `fecha` si vence: la venta está "al día" si `hoy <= fecha + dias_credito`.
+fn vencido_fifo(
+    conn: &Connection,
+    empresa_id: i64,
+    dias_credito: i64,
+    pagado: i64,
+) -> Result<i64, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT total, (date('now') <= date(fecha, '+' || ?1 || ' days'))
+             FROM ventas WHERE empresa_id = ?2 AND estado = 'entregada'
+             ORDER BY fecha ASC, id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![dias_credito, empresa_id], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, bool>(1)?))
+        })
+        .map_err(|e| e.to_string())?;
+    let mut lineas: Vec<(i64, bool)> = Vec::new();
+    for r in rows {
+        lineas.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(calcular_vencido(&lineas, pagado))
+}
+
+/// Reparte los pagos acumulados (FIFO) sobre las ventas entregadas más antiguas:
+/// lo que no queda cubierto y ya pasó su fecha límite (hoy > fecha + plazo)
+/// es el total vencido.
+fn calcular_vencido(lineas: &[(i64, bool)], pagado: i64) -> i64 {
+    let mut por_pagar = pagado;
+    let mut vencido = 0i64;
+    for &(total, en_plazo) in lineas {
+        if total <= 0 {
+            continue;
+        }
+        if por_pagar >= total {
+            por_pagar -= total;
+        } else if por_pagar > 0 {
+            if !en_plazo {
+                vencido += total - por_pagar;
+            }
+            por_pagar = 0;
+        } else if !en_plazo {
+            vencido += total;
+        }
+    }
+    vencido
 }
 
 /// Registra un abono a cuenta (no asociado a una factura).
@@ -394,6 +496,159 @@ mod tests {
             .unwrap();
         assert_eq!(tipo, "pago_movil");
         assert_eq!(refe, "R-99");
+    }
+
+    /// Venta a crédito; devuelve el id para poder retroceder la fecha.
+    fn venta_credito_id(conn: &mut Connection, eid: i64, uid: i64, precio: i64) -> i64 {
+        let pid = producto(conn, precio);
+        stock(conn, pid, 20.0);
+        crate::ventas::crear_venta(
+            conn,
+            &VentaInput {
+                empresa_id: eid,
+                tipo: "credito".into(),
+                descuento: 0,
+                detalles: vec![DetalleVentaInput {
+                    producto_id: pid,
+                    cantidad: 1.0,
+                }],
+                pagos: vec![],
+                operador_id: uid,
+            },
+        )
+        .unwrap()
+        .id
+    }
+
+    fn fijar_plazo(conn: &Connection, eid: i64, dias: i64) {
+        conn.execute(
+            "UPDATE empresas SET dias_credito = ?1 WHERE id = ?2",
+            params![dias, eid],
+        )
+        .unwrap();
+    }
+
+    fn retroceder(conn: &Connection, venta_id: i64, expr: &str) {
+        conn.execute(
+            "UPDATE ventas SET fecha = date('now', ?1) WHERE id = ?2",
+            params![expr, venta_id],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn venta_fuera_de_plazo_quede_vencida() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        fijar_plazo(&conn, eid, 30);
+        let vid = venta_credito_id(&mut conn, eid, uid, 10_00);
+        retroceder(&conn, vid, "-40 days"); // vence a los 30, hoy pasó 40
+
+        let ec = estado_cuenta(&conn, eid).unwrap();
+        assert_eq!(ec.total_facturado, 10_00);
+        assert_eq!(ec.saldo_pendiente, 10_00);
+        assert_eq!(ec.total_vencido, 10_00);
+        assert_eq!(ec.total_al_dia, 0);
+        assert_eq!(ec.dias_credito, 30);
+    }
+
+    #[test]
+    fn venta_dentro_de_plazo_queda_al_dia() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        fijar_plazo(&conn, eid, 30);
+        venta_credito_id(&mut conn, eid, uid, 10_00); // hoy, vence en 30 días
+
+        let ec = estado_cuenta(&conn, eid).unwrap();
+        assert_eq!(ec.total_vencido, 0);
+        assert_eq!(ec.total_al_dia, 10_00);
+    }
+
+    #[test]
+    fn abono_saldo_la_factura_mas_antigua_fifo() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        fijar_plazo(&conn, eid, 30);
+        let vieja = venta_credito_id(&mut conn, eid, uid, 10_00);
+        retroceder(&conn, vieja, "-40 days"); // vencería a los 30
+        venta_credito_id(&mut conn, eid, uid, 5_00); // reciente, al día
+
+        // Abona $10: cubre la vieja; queda pendiente la nueva ($5, al día).
+        registrar_abono(
+            &mut conn,
+            &abono(eid, uid, vec![pago(10_00, "efectivo", "usd", None)]),
+        )
+        .unwrap();
+        let ec = estado_cuenta(&conn, eid).unwrap();
+        assert_eq!(ec.saldo_pendiente, 5_00);
+        assert_eq!(ec.total_vencido, 0);
+        assert_eq!(ec.total_al_dia, 5_00);
+    }
+
+    #[test]
+    fn abono_parcial_deja_factura_antigua_vencida() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        fijar_plazo(&conn, eid, 30);
+        let vieja = venta_credito_id(&mut conn, eid, uid, 10_00);
+        retroceder(&conn, vieja, "-40 days");
+        venta_credito_id(&mut conn, eid, uid, 5_00); // reciente
+
+        // Abona solo $5: la vieja queda con $5 vencidos, la nueva al día.
+        registrar_abono(
+            &mut conn,
+            &abono(eid, uid, vec![pago(5_00, "efectivo", "usd", None)]),
+        )
+        .unwrap();
+        let ec = estado_cuenta(&conn, eid).unwrap();
+        assert_eq!(ec.saldo_pendiente, 10_00);
+        assert_eq!(ec.total_vencido, 5_00);
+        assert_eq!(ec.total_al_dia, 5_00);
+    }
+
+    #[test]
+    fn plazo_cero_deja_vencida_la_venta_de_ayer() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        fijar_plazo(&conn, eid, 0);
+        let vid = venta_credito_id(&mut conn, eid, uid, 10_00);
+        retroceder(&conn, vid, "-1 day"); // venció ayer (plazo = 0)
+
+        let ec = estado_cuenta(&conn, eid).unwrap();
+        assert_eq!(ec.total_vencido, 10_00);
+        assert_eq!(ec.total_al_dia, 0);
+    }
+
+    #[test]
+    fn estado_cuenta_todos_incluye_vencido_y_al_dia() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        fijar_plazo(&conn, eid, 30);
+        let vid = venta_credito_id(&mut conn, eid, uid, 10_00);
+        retroceder(&conn, vid, "-40 days");
+
+        let todos = estado_cuenta_todos(&conn).unwrap();
+        let ec = todos.iter().find(|e| e.empresa_id == eid).unwrap();
+        assert_eq!(ec.total_vencido, 10_00);
+        assert_eq!(ec.total_al_dia, 0);
     }
 }
 

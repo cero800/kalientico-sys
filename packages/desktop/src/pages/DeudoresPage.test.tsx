@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { registrarAbono } from '../services/db';
+import { estadoCuentaTodos, registrarAbono } from '../services/db';
 import { useSesion } from '../store/sesion';
 import DeudoresPage from './DeudoresPage';
 
 vi.mock('../services/db', () => ({
   estadoCuentaTodos: vi.fn().mockResolvedValue([
-    { empresa_id: 2, nombre_comercial: 'Café del Centro', total_facturado: 25000, total_pagado: 5000, saldo_pendiente: 20000 },
+    { empresa_id: 2, nombre_comercial: 'Café del Centro', total_facturado: 25000, total_pagado: 5000, saldo_pendiente: 20000, total_vencido: 15000, total_al_dia: 5000, dias_credito: 30 },
   ]),
   estadoCuenta: vi.fn(),
   historialPagos: vi.fn().mockResolvedValue([
@@ -22,11 +22,24 @@ beforeEach(() => {
 });
 
 describe('DeudoresPage', () => {
-  it('lista deudores con saldo pendiente', async () => {
+  it('lista deudores con vencido, plazo y saldo', async () => {
     render(<DeudoresPage />);
     expect(await screen.findByText('Café del Centro')).toBeInTheDocument();
-    expect(screen.getByText('Pendiente')).toBeInTheDocument();
+    expect(screen.getByText('Vencido', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.queryByText('Al día')).not.toBeInTheDocument();
+    expect(screen.getByText('Plazo: 30 días')).toBeInTheDocument();
+    expect(screen.getByText('$150.00')).toBeInTheDocument();
     expect(screen.getAllByText('$200.00').length).toBeGreaterThan(0);
+  });
+
+  it('marca Al día cuando no hay saldo vencido', async () => {
+    vi.mocked(estadoCuentaTodos).mockResolvedValueOnce([
+      { empresa_id: 2, nombre_comercial: 'Café del Centro', total_facturado: 25000, total_pagado: 5000, saldo_pendiente: 20000, total_vencido: 0, total_al_dia: 20000, dias_credito: 30 },
+    ] as never);
+    render(<DeudoresPage />);
+    expect(await screen.findByText('Café del Centro')).toBeInTheDocument();
+    expect(screen.getByText('Al día')).toBeInTheDocument();
+    expect(screen.queryByText('Vencido', { selector: 'span' })).not.toBeInTheDocument();
   });
 
   it('muestra historial de pagos al seleccionar cliente', async () => {

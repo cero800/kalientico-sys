@@ -21,7 +21,6 @@ function vacio(): ProductoInput {
     nombre: '',
     unidad_medida: 'unidad',
     precio_base: 0,
-    precio_mayoreo: 0,
     activo: true,
   };
 }
@@ -34,7 +33,6 @@ export default function ProductosPage() {
   const [editando, setEditando] = useState<Producto | null>(null);
   const [form, setForm] = useState<ProductoInput>(vacio());
   const [precioBaseTex, setPrecioBaseTex] = useState('');
-  const [precioMayoreoTex, setPrecioMayoreoTex] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -53,7 +51,6 @@ export default function ProductosPage() {
     setEditando(null);
     setForm(vacio());
     setPrecioBaseTex('');
-    setPrecioMayoreoTex('');
     setError(null);
     setModal(true);
   };
@@ -65,11 +62,9 @@ export default function ProductosPage() {
       nombre: p.nombre,
       unidad_medida: p.unidad_medida,
       precio_base: p.precio_base,
-      precio_mayoreo: p.precio_mayoreo,
       activo: p.activo,
     });
     setPrecioBaseTex((p.precio_base / 100).toFixed(2));
-    setPrecioMayoreoTex((p.precio_mayoreo / 100).toFixed(2));
     setError(null);
     setModal(true);
   };
@@ -80,12 +75,11 @@ export default function ProductosPage() {
       return;
     }
     const precioBase = precioBaseTex.trim() === '' ? 0 : parseCentsInput(precioBaseTex, 'usd');
-    const precioMayoreo = precioMayoreoTex.trim() === '' ? 0 : parseCentsInput(precioMayoreoTex, 'usd');
-    if (precioBase == null || precioMayoreo == null) {
-      setError('Ingresa precios válidos en US$ (máx. 2 decimales)');
+    if (precioBase == null) {
+      setError('Ingresa un precio válido en US$ (máx. 2 decimales)');
       return;
     }
-    const aGuardar = { ...form, precio_base: precioBase, precio_mayoreo: precioMayoreo };
+    const aGuardar = { ...form, precio_base: precioBase };
     setGuardando(true);
     setError(null);
     try {
@@ -151,8 +145,7 @@ export default function ProductosPage() {
                 <Th>Código</Th>
                 <Th>Nombre</Th>
                 <Th>Unidad</Th>
-                <Th className="text-right">Precio base</Th>
-                <Th className="text-right">Mayoreo</Th>
+                <Th className="text-right">Precio</Th>
                 <Th>Estado</Th>
                 <Th className="text-right">Acciones</Th>
               </tr>
@@ -167,7 +160,6 @@ export default function ProductosPage() {
                   </Td>
                   <Td>{p.unidad_medida}</Td>
                   <Td className="text-right">{formatUsdCents(p.precio_base)}</Td>
-                  <Td className="text-right">{formatUsdCents(p.precio_mayoreo)}</Td>
                   <Td>
                     <Badge tone={p.activo ? 'green' : 'gray'}>{p.activo ? 'Activo' : 'Inactivo'}</Badge>
                   </Td>
@@ -222,28 +214,14 @@ export default function ProductosPage() {
               </option>
             ))}
           </Select>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <Input
-                label="Precio base (US$)"
-                prefix="$"
-                inputMode="decimal"
-                placeholder="1.20"
-                value={precioBaseTex}
-                onChange={(e) => setPrecioBaseTex(e.target.value)}
-              />
-            </div>
-            <div className="flex-1">
-              <Input
-                label="Precio mayoreo (US$)"
-                prefix="$"
-                inputMode="decimal"
-                placeholder="54.00"
-                value={precioMayoreoTex}
-                onChange={(e) => setPrecioMayoreoTex(e.target.value)}
-              />
-            </div>
-          </div>
+          <Input
+            label="Precio unitario (US$)"
+            prefix="$"
+            inputMode="decimal"
+            placeholder="1.20"
+            value={precioBaseTex}
+            onChange={(e) => setPrecioBaseTex(e.target.value)}
+          />
         </div>
       </Modal>
     </div>

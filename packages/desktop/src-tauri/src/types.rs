@@ -44,7 +44,6 @@ pub struct Producto {
     pub descripcion: Option<String>,
     pub unidad_medida: String,
     pub precio_base: i64,
-    pub precio_mayoreo: i64,
     pub activo: bool,
     pub creado_en: Option<String>,
 }
@@ -56,7 +55,6 @@ pub struct ProductoInput {
     pub descripcion: Option<String>,
     pub unidad_medida: String,
     pub precio_base: i64,
-    pub precio_mayoreo: i64,
     pub activo: bool,
 }
 
@@ -142,6 +140,12 @@ pub struct EstadoCuenta {
     pub total_facturado: i64,
     pub total_pagado: i64,
     pub saldo_pendiente: i64,
+    /// Parte del saldo cuya fecha límite de pago ya venció (días naturales).
+    pub total_vencido: i64,
+    /// Resto del saldo aún dentro del plazo (`saldo_pendiente - total_vencido`).
+    pub total_al_dia: i64,
+    /// Plazo en días que el cliente tiene para pagar sus ventas a crédito (0 = al contado).
+    pub dias_credito: i64,
 }
 
 /// Abono a cuenta de un cliente (sin vincular a una factura concreta).

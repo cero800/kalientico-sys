@@ -29,8 +29,8 @@ const facturaMock = {
 
 vi.mock('../services/db', () => ({
   listarProductos: vi.fn().mockResolvedValue([
-    { id: 1, codigo: 'P1', nombre: 'Pan Canilla', descripcion: null, unidad_medida: 'unidad', precio_base: 500, precio_mayoreo: 450, impuesto_porcentaje: 0, activo: true, creado_en: null },
-    { id: 2, codigo: 'P2', nombre: 'Croissant', descripcion: null, unidad_medida: 'unidad', precio_base: 800, precio_mayoreo: 700, impuesto_porcentaje: 0, activo: true, creado_en: null },
+    { id: 1, codigo: 'P1', nombre: 'Pan Canilla', descripcion: null, unidad_medida: 'unidad', precio_base: 500, impuesto_porcentaje: 0, activo: true, creado_en: null },
+    { id: 2, codigo: 'P2', nombre: 'Croissant', descripcion: null, unidad_medida: 'unidad', precio_base: 800, impuesto_porcentaje: 0, activo: true, creado_en: null },
   ]),
   listarEmpresas: vi.fn().mockResolvedValue([
     { id: 1, rut_nit: '0', nombre_comercial: 'Consumidor Final', razon_social: null, telefono: null, email: null, direccion: null, dias_credito: 0, limite_credito: 0, activo: true, creado_en: null },
@@ -70,11 +70,42 @@ describe('VentaPage', () => {
 
     expect(await screen.findByText('Pan Canilla')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Pan Canilla/i }));
+    await user.click(screen.getByRole('button', { name: 'Agregar' }));
     expect(await screen.findByText('$5.00 × 1')).toBeInTheDocument();
 
     // producto sin stock no se puede agregar
     expect(screen.getByRole('button', { name: /Croissant/i })).toBeDisabled();
     useCarrito.getState().vaciar();
+  });
+
+  it('permite agregar una cantidad fija de un producto', async () => {
+    const user = userEvent.setup();
+    render(<VentaPage />);
+
+    await screen.findByText('Pan Canilla');
+    await user.click(screen.getByRole('button', { name: /Pan Canilla/i }));
+    const cantidad = screen.getByLabelText(/Cantidad/i);
+    await user.clear(cantidad);
+    await user.type(cantidad, '6');
+    await user.click(screen.getByRole('button', { name: 'Agregar' }));
+
+    expect(await screen.findByText('$5.00 × 6')).toBeInTheDocument();
+    expect(screen.getByTestId('total-usd')).toHaveTextContent('$30.00');
+    useCarrito.getState().vaciar();
+  });
+
+  it('rechaza una cantidad superior al stock disponible', async () => {
+    const user = userEvent.setup();
+    render(<VentaPage />);
+
+    await screen.findByText('Pan Canilla');
+    await user.click(screen.getByRole('button', { name: /Pan Canilla/i }));
+    const cantidad = screen.getByLabelText(/Cantidad/i);
+    await user.clear(cantidad);
+    await user.type(cantidad, '11');
+    expect(screen.getByText(/Solo hay 10 disponibles/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar' })).toBeDisabled();
+    expect(useCarrito.getState().lineas).toHaveLength(0);
   });
 
   it('aplica precio especial al cambiar de cliente', async () => {
@@ -86,6 +117,7 @@ describe('VentaPage', () => {
     await waitFor(() => expect(screen.getByText('$9.00')).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: /Pan Canilla/i }));
+    await user.click(screen.getByRole('button', { name: 'Agregar' }));
     expect(screen.getByText('$9.00 × 1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cobrar/ })).toBeEnabled();
     useCarrito.getState().vaciar();
@@ -97,6 +129,7 @@ describe('VentaPage', () => {
     await screen.findByRole('button', { name: /Pan Canilla/i });
 
     await user.click(screen.getByRole('button', { name: /Pan Canilla/i }));
+    await user.click(screen.getByRole('button', { name: 'Agregar' }));
     await user.click(screen.getByRole('button', { name: /Cobrar/ }));
 
     await user.type(screen.getAllByLabelText(/Monto pago/)[0], '5');

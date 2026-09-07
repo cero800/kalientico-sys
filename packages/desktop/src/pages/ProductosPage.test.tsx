@@ -6,8 +6,8 @@ import ProductosPage from './ProductosPage';
 
 vi.mock('../services/db', () => ({
   listarProductos: vi.fn().mockResolvedValue([
-    { id: 1, codigo: 'P1', nombre: 'Pan Canilla', descripcion: null, unidad_medida: 'unidad', precio_base: 500, precio_mayoreo: 450, impuesto_porcentaje: 0, activo: true, creado_en: null },
-    { id: 2, codigo: 'P2', nombre: 'Torta Chocolate', descripcion: null, unidad_medida: 'unidad', precio_base: 1500, precio_mayoreo: 1400, impuesto_porcentaje: 15, activo: false, creado_en: null },
+    { id: 1, codigo: 'P1', nombre: 'Pan Canilla', descripcion: null, unidad_medida: 'unidad', precio_base: 500, impuesto_porcentaje: 0, activo: true, creado_en: null },
+    { id: 2, codigo: 'P2', nombre: 'Torta Chocolate', descripcion: null, unidad_medida: 'unidad', precio_base: 1500, impuesto_porcentaje: 15, activo: false, creado_en: null },
   ]),
   crearProducto: vi.fn(),
   actualizarProducto: vi.fn(),
@@ -62,12 +62,11 @@ describe('ProductosPage', () => {
     await user.click(screen.getByRole('button', { name: /Nuevo producto/ }));
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByLabelText(/Nombre/), 'Pan canilla premium');
-    await user.type(within(dialog).getByLabelText(/Precio base/), '1.20');
-    await user.type(within(dialog).getByLabelText(/Precio mayoreo/), '54');
+    await user.type(within(dialog).getByLabelText(/Precio/), '1.20');
     await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
 
     expect(crearProducto).toHaveBeenCalledWith(
-      expect.objectContaining({ nombre: 'Pan canilla premium', precio_base: 120, precio_mayoreo: 5400 }),
+      expect.objectContaining({ nombre: 'Pan canilla premium', precio_base: 120 }),
     );
   });
 
@@ -79,10 +78,10 @@ describe('ProductosPage', () => {
     await user.click(screen.getByRole('button', { name: /Nuevo producto/ }));
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByLabelText(/Nombre/), 'X');
-    await user.type(within(dialog).getByLabelText(/Precio base/), '1.2.3');
+    await user.type(within(dialog).getByLabelText(/Precio/), '1.2.3');
     await user.click(within(dialog).getByRole('button', { name: 'Guardar' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('precios válidos');
+    expect(await screen.findByRole('alert')).toHaveTextContent('precio válido');
     expect(crearProducto).not.toHaveBeenCalled();
   });
 

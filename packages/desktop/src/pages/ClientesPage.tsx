@@ -102,7 +102,9 @@ export default function ClientesPage() {
                     <Td className="font-mono text-xs text-gray-500">{c.rut_nit}</Td>
                     <Td>
                       <span className="font-medium text-gray-900">{c.nombre_comercial}</span>
-                      <span className="block text-xs text-gray-400">{c.dias_credito} días</span>
+                      <span className="block text-xs text-gray-400">
+                        {c.dias_credito > 0 ? `Plazo: ${c.dias_credito} días` : 'Al contado'}
+                      </span>
                     </Td>
                     <Td>{formatUsdCents(c.limite_credito)}</Td>
                     <Td>
@@ -136,7 +138,8 @@ export default function ClientesPage() {
             </div>
             <div className="flex-1">
               <Input
-                label="Días de crédito"
+                label="Plazo de pago (días)"
+                hint="Días para pagar las ventas a crédito (0 = al contado)"
                 type="number"
                 min={0}
                 value={form.dias_credito}

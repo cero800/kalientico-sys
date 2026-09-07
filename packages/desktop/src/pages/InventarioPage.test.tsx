@@ -11,8 +11,8 @@ vi.mock('../services/db', () => ({
     { producto_id: 2, nombre: 'Croissant', codigo: 'P2', cantidad_disponible: 0, unidad_medida: 'unidad' },
   ]),
   listarProductos: vi.fn().mockResolvedValue([
-    { id: 1, codigo: 'P1', nombre: 'Pan Canilla', descripcion: null, unidad_medida: 'unidad', precio_base: 500, precio_mayoreo: 450, impuesto_porcentaje: 0, activo: true, creado_en: null },
-    { id: 2, codigo: 'P2', nombre: 'Croissant', descripcion: null, unidad_medida: 'unidad', precio_base: 800, precio_mayoreo: 700, impuesto_porcentaje: 0, activo: true, creado_en: null },
+    { id: 1, codigo: 'P1', nombre: 'Pan Canilla', descripcion: null, unidad_medida: 'unidad', precio_base: 500, impuesto_porcentaje: 0, activo: true, creado_en: null },
+    { id: 2, codigo: 'P2', nombre: 'Croissant', descripcion: null, unidad_medida: 'unidad', precio_base: 800, impuesto_porcentaje: 0, activo: true, creado_en: null },
   ]),
   registrarProduccion: vi.fn(),
   registrarMerma: vi.fn(),

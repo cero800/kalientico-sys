@@ -10,7 +10,8 @@ use std::sync::Mutex;
 /// v2: moneda dual US$/Bs — ventas y pagos guardan `moneda` + snapshot `tasa_cambio`;
 ///     la caja pasa a arqueo independiente por moneda.
 /// v3: seguridad — usuarios con `pin` numérico y habilitación de roles admin/cajero.
-pub const SCHEMA_VERSION: i64 = 3;
+/// v4: limpieza — se elimina la columna `precio_mayoreo` (no utilizada).
+pub const SCHEMA_VERSION: i64 = 4;
 
 pub struct Db(pub Mutex<Connection>);
 
@@ -39,7 +40,6 @@ CREATE TABLE IF NOT EXISTS productos (
     descripcion TEXT,
     unidad_medida TEXT NOT NULL DEFAULT 'unidad', -- unidad|kg|paquete|bandeja|caja
     precio_base INTEGER NOT NULL DEFAULT 0,        -- centavos
-    precio_mayoreo INTEGER NOT NULL DEFAULT 0,     -- centavos, 0 = no aplica
     impuesto_porcentaje REAL NOT NULL DEFAULT 0,   -- 0..100
     activo INTEGER NOT NULL DEFAULT 1,
     creado_en DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -247,6 +247,19 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
         "UPDATE usuarios SET pin = ?1 WHERE rol = 'admin' AND (pin IS NULL OR pin = '')",
         rusqlite::params!["1234"],
     )?;
+
+    // v4: eliminar `precio_mayoreo` de productos (campo sin uso en la venta).
+    let tiene_mayoreo = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('productos') WHERE name = 'precio_mayoreo'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    if tiene_mayoreo {
+        conn.execute("ALTER TABLE productos DROP COLUMN precio_mayoreo", [])?;
+    }
     Ok(())
 }
 
@@ -331,5 +344,56 @@ mod tests {
             })
             .expect("leer pin del admin");
         assert_eq!(pin, "1234", "el admin debe quedar con PIN por defecto");
+    }
+
+    /// Regresión v1.0.11: una base creada con `precio_mayoreo` debe migrar
+    /// eliminando la columna sin perder las demás.
+    #[test]
+    fn migra_productos_sin_precio_mayoreo() {
+        let conn = Connection::open_in_memory().expect("abrir bd en memoria");
+        conn.execute_batch(
+            "CREATE TABLE usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                rol TEXT NOT NULL DEFAULT 'cajero',
+                activo INTEGER NOT NULL DEFAULT 1,
+                creado_en DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO usuarios (nombre, rol) VALUES ('Administrador', 'admin');
+            CREATE TABLE productos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                codigo TEXT UNIQUE NOT NULL,
+                nombre TEXT NOT NULL,
+                precio_base INTEGER NOT NULL DEFAULT 0,
+                precio_mayoreo INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO productos (codigo, nombre, precio_base, precio_mayoreo)
+            VALUES ('P1', 'Pan', 500, 450);",
+        )
+        .expect("crear esquema con mayoreo");
+
+        apply_migrations(&conn).expect("la migración v4 no debe fallar");
+
+        let tiene_mayoreo: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('productos') WHERE name = 'precio_mayoreo'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("consultar columnas");
+        assert_eq!(
+            tiene_mayoreo, 0,
+            "se debe eliminar la columna precio_mayoreo"
+        );
+
+        let (nombre, base): (String, i64) = conn
+            .query_row(
+                "SELECT nombre, precio_base FROM productos WHERE codigo='P1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .expect("leer producto migrado");
+        assert_eq!(nombre, "Pan");
+        assert_eq!(base, 500, "los demás campos se conservan");
     }
 }

@@ -85,7 +85,7 @@ pub fn listar_productos(conn: &Connection) -> Result<Vec<Producto>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT id, codigo, nombre, descripcion, unidad_medida, precio_base,
-                    precio_mayoreo, activo, creado_en
+                    activo, creado_en
              FROM productos WHERE activo = 1 ORDER BY nombre ASC",
         )
         .map_err(|e| e.to_string())?;
@@ -98,9 +98,8 @@ pub fn listar_productos(conn: &Connection) -> Result<Vec<Producto>, String> {
                 descripcion: r.get(3)?,
                 unidad_medida: r.get(4)?,
                 precio_base: r.get(5)?,
-                precio_mayoreo: r.get(6)?,
-                activo: r.get(7)?,
-                creado_en: r.get(8)?,
+                activo: r.get(6)?,
+                creado_en: r.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -113,23 +112,21 @@ pub fn crear_producto(conn: &Connection, p: &ProductoInput) -> Result<i64, Strin
     if codigo.is_empty() {
         return Err("El código del producto no puede estar vacío".to_string());
     }
-    validators::validar_monto_positivo(p.precio_base, "Precio base")?;
-    validators::validar_monto(p.precio_mayoreo, "Precio mayoreo")?;
+    validators::validar_monto_positivo(p.precio_base, "Precio unitario")?;
     // Impuesto eliminado del negocio: siempre se guarda 0 (la columna se conserva).
     let impuesto_porcentaje = 0.0;
     validators::validar_unidad_medida(&p.unidad_medida)?;
 
     conn.execute(
         "INSERT INTO productos (codigo, nombre, descripcion, unidad_medida, precio_base,
-                                precio_mayoreo, impuesto_porcentaje, activo)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                                impuesto_porcentaje, activo)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             codigo,
             p.nombre.trim(),
             p.descripcion,
             p.unidad_medida,
             p.precio_base,
-            p.precio_mayoreo,
             impuesto_porcentaje,
             p.activo,
         ],
@@ -147,21 +144,20 @@ pub fn crear_producto(conn: &Connection, p: &ProductoInput) -> Result<i64, Strin
 }
 
 pub fn actualizar_producto(conn: &Connection, id: i64, p: &ProductoInput) -> Result<(), String> {
-    validators::validar_monto_positivo(p.precio_base, "Precio base")?;
+    validators::validar_monto_positivo(p.precio_base, "Precio unitario")?;
     // Impuesto eliminado del negocio: siempre se guarda 0 (la columna se conserva).
     let impuesto_porcentaje = 0.0;
     validators::validar_unidad_medida(&p.unidad_medida)?;
     conn.execute(
         "UPDATE productos SET codigo=?1, nombre=?2, descripcion=?3, unidad_medida=?4,
-                precio_base=?5, precio_mayoreo=?6, impuesto_porcentaje=?7, activo=?8
-         WHERE id=?9",
+                precio_base=?5, impuesto_porcentaje=?6, activo=?7
+         WHERE id=?8",
         params![
             validators::normalizar_clave(&p.codigo),
             p.nombre.trim(),
             p.descripcion,
             p.unidad_medida,
             p.precio_base,
-            p.precio_mayoreo,
             impuesto_porcentaje,
             p.activo,
             id,
@@ -755,7 +751,6 @@ mod tests {
             descripcion: None,
             unidad_medida: "unidad".into(),
             precio_base: 500,
-            precio_mayoreo: 0,
             activo: true,
         };
         let id = crear_producto(&conn, &p).unwrap();

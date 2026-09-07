@@ -179,6 +179,7 @@ export default function DeudoresPage() {
                   <Th>Cliente</Th>
                   <Th className="text-right">Facturado</Th>
                   <Th className="text-right">Pagado</Th>
+                  <Th className="text-right">Vencido</Th>
                   <Th className="text-right">Saldo</Th>
                 </tr>
               </THead>
@@ -193,12 +194,21 @@ export default function DeudoresPage() {
                   >
                     <Td>
                       <span className="font-medium text-gray-900">{d.nombre_comercial}</span>
-                      {d.saldo_pendiente > 0 && (
-                        <Badge tone="red">Pendiente</Badge>
+                      {d.saldo_pendiente > 0 && d.total_vencido > 0 && (
+                        <Badge tone="red">Vencido</Badge>
+                      )}
+                      {d.saldo_pendiente > 0 && d.total_vencido === 0 && (
+                        <Badge tone="green">Al día</Badge>
+                      )}
+                      {d.dias_credito > 0 && (
+                        <span className="block text-xs text-gray-400">Plazo: {d.dias_credito} días</span>
                       )}
                     </Td>
                     <Td className="text-right">{formatUsdCents(d.total_facturado)}</Td>
                     <Td className="text-right">{formatUsdCents(d.total_pagado)}</Td>
+                    <Td className={`text-right font-bold ${d.total_vencido > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                      {d.total_vencido > 0 ? formatUsdCents(d.total_vencido) : '—'}
+                    </Td>
                     <Td className={`text-right font-bold ${d.saldo_pendiente > 0 ? 'text-red-600' : 'text-gray-900'}`}>
                       {formatUsdCents(d.saldo_pendiente)}
                     </Td>
@@ -212,7 +222,12 @@ export default function DeudoresPage() {
         <Card>
           <CardHeader
             title={seleccion ? `Historial — ${seleccion.nombre_comercial}` : 'Historial de pagos'}
-            subtitle={seleccion ? `Saldo pendiente: ${formatUsdCents(seleccion.saldo_pendiente)}` : 'Selecciona un cliente'}
+            subtitle={seleccion
+                ? seleccion.total_vencido > 0
+                  ? `Vencido: ${formatUsdCents(seleccion.total_vencido)} · Saldo: ${formatUsdCents(seleccion.saldo_pendiente)}`
+                  : `Saldo pendiente: ${formatUsdCents(seleccion.saldo_pendiente)}`
+                : 'Selecciona un cliente'
+            }
             actions={
               seleccion && (seleccion.saldo_pendiente ?? 0) > 0 ? (
                 <Button onClick={abrirAbono}>
