@@ -11,7 +11,9 @@ use std::sync::Mutex;
 ///     la caja pasa a arqueo independiente por moneda.
 /// v3: seguridad — usuarios con `pin` numérico y habilitación de roles admin/cajero.
 /// v4: limpieza — se elimina la columna `precio_mayoreo` (no utilizada).
-pub const SCHEMA_VERSION: i64 = 4;
+/// v5: devoluciones — panes deteriorados/extraviados devueltos por el cliente
+///     (ajuste que resta del total facturado; no toca stock ni caja).
+pub const SCHEMA_VERSION: i64 = 5;
 
 pub struct Db(pub Mutex<Connection>);
 
@@ -145,6 +147,22 @@ CREATE TABLE IF NOT EXISTS pagos (
     FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE SET NULL
 );
 
+-- ============================ DEVOLUCIONES ============================
+-- Ajuste por productos deteriorados/extraviados devueltos por el cliente.
+-- monto SIEMPRE en centavos de US$; resta del total facturado de la empresa.
+-- No modifica la factura original ni el stock; solo ajusta el estado de cuenta.
+CREATE TABLE IF NOT EXISTS devoluciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    empresa_id INTEGER NOT NULL,
+    venta_id INTEGER NOT NULL,
+    monto INTEGER NOT NULL,             -- centavos US$
+    motivo TEXT,
+    operador_id INTEGER,
+    fecha_devolucion DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+    FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE SET NULL
+);
+
 -- ============================ OPERACIÓN ============================
 CREATE TABLE IF NOT EXISTS usuarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,6 +213,8 @@ CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha);
 CREATE INDEX IF NOT EXISTS idx_detalle_venta ON detalle_ventas(venta_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_empresa ON pagos(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_venta ON pagos(venta_id);
+CREATE INDEX IF NOT EXISTS idx_devoluciones_empresa ON devoluciones(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_devoluciones_venta ON devoluciones(venta_id);
 CREATE INDEX IF NOT EXISTS idx_prod_fecha ON producciones(fecha);
 CREATE INDEX IF NOT EXISTS idx_cajas_fecha ON cajas(fecha);
 "#;
@@ -260,6 +280,22 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
     if tiene_mayoreo {
         conn.execute("ALTER TABLE productos DROP COLUMN precio_mayoreo", [])?;
     }
+
+    // v5: tabla `devoluciones` (ajustes por panes deteriorados/extraviados).
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS devoluciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empresa_id INTEGER NOT NULL,
+            venta_id INTEGER NOT NULL,
+            monto INTEGER NOT NULL,
+            motivo TEXT,
+            operador_id INTEGER,
+            fecha_devolucion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+            FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
     Ok(())
 }
 
@@ -395,5 +431,64 @@ mod tests {
             .expect("leer producto migrado");
         assert_eq!(nombre, "Pan");
         assert_eq!(base, 500, "los demás campos se conservan");
+    }
+
+    /// Regresión v1.0.13: una base de v4 (sin tabla `devoluciones`) debe ganar la
+    /// tabla tras aplicar las migraciones, conservando los datos existentes.
+    #[test]
+    fn migra_bases_antiguas_con_devoluciones() {
+        let conn = Connection::open_in_memory().expect("abrir bd en memoria");
+        conn.execute_batch(
+            "CREATE TABLE usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                rol TEXT NOT NULL DEFAULT 'cajero',
+                activo INTEGER NOT NULL DEFAULT 1,
+                creado_en DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO usuarios (nombre, rol) VALUES ('Administrador', 'admin');
+            CREATE TABLE productos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                codigo TEXT UNIQUE NOT NULL,
+                nombre TEXT NOT NULL,
+                precio_base INTEGER NOT NULL DEFAULT 0,
+                precio_mayoreo INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO productos (codigo, nombre, precio_base, precio_mayoreo)
+            VALUES ('P1', 'Pan', 500, 450);
+            CREATE TABLE ventas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                empresa_id INTEGER NOT NULL,
+                numero_factura INTEGER NOT NULL UNIQUE,
+                tipo TEXT NOT NULL,
+                estado TEXT NOT NULL DEFAULT 'entregada',
+                fecha DATE NOT NULL,
+                subtotal INTEGER NOT NULL DEFAULT 0,
+                descuento INTEGER NOT NULL DEFAULT 0,
+                impuesto INTEGER NOT NULL DEFAULT 0,
+                total INTEGER NOT NULL DEFAULT 0
+            );",
+        )
+        .expect("crear esquema v4");
+
+        apply_migrations(&conn).expect("las migraciones v3-v5 no deben fallar");
+
+        let tabla: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='devoluciones'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("buscar tabla devoluciones");
+        assert_eq!(tabla, 1, "se debe crear la tabla devoluciones");
+
+        let base: i64 = conn
+            .query_row(
+                "SELECT precio_base FROM productos WHERE codigo='P1'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("leer producto migrado");
+        assert_eq!(base, 500, "los datos previos se conservan tras migrar");
     }
 }

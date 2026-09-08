@@ -1,6 +1,7 @@
 mod backup;
 mod caja;
 mod db;
+mod devoluciones;
 mod factura;
 mod pagos;
 mod repo;
@@ -13,8 +14,8 @@ mod ventas;
 pub(crate) mod testutil;
 
 use crate::types::{
-    AbonoInput, CajaAbrirInput, CajaCerrarInput, ConfigurarAdminInput, EmpresaInput,
-    PrecioClienteInput, ProductoInput, UsuarioInput, VentaInput,
+    AbonoInput, CajaAbrirInput, CajaCerrarInput, ConfigurarAdminInput, DevolucionInput,
+    EmpresaInput, PrecioClienteInput, ProductoInput, UsuarioInput, VentaInput,
 };
 use db::Db;
 use rusqlite::Connection;
@@ -235,6 +236,42 @@ fn registrar_abono(state: State<'_, Db>, abono: AbonoInput) -> Result<(), String
 #[tauri::command(rename_all = "snake_case")]
 fn historial_pagos(state: State<'_, Db>, empresa_id: i64) -> Result<Vec<types::PagoLinea>, String> {
     pagos::historial_pagos(&*lock(&state)?, empresa_id)
+}
+
+//---------------------------------------------------------------------------
+// Comandos — Devoluciones (panes deteriorados/extraviados)
+//---------------------------------------------------------------------------
+
+#[tauri::command]
+fn registrar_devolucion(
+    state: State<'_, Db>,
+    devolucion: DevolucionInput,
+) -> Result<types::Devolucion, String> {
+    devoluciones::registrar_devolucion(&mut *lock(&state)?, &devolucion)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn listar_ventas_empresa(
+    state: State<'_, Db>,
+    empresa_id: i64,
+) -> Result<Vec<types::VentaDevolucion>, String> {
+    devoluciones::listar_ventas_empresa(&*lock(&state)?, empresa_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn detalle_venta(
+    state: State<'_, Db>,
+    venta_id: i64,
+) -> Result<Vec<types::DetalleVentaDevolucion>, String> {
+    devoluciones::detalle_venta(&*lock(&state)?, venta_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn listar_devoluciones(
+    state: State<'_, Db>,
+    empresa_id: i64,
+) -> Result<Vec<types::Devolucion>, String> {
+    devoluciones::listar_devoluciones(&*lock(&state)?, empresa_id)
 }
 
 //---------------------------------------------------------------------------
@@ -521,6 +558,10 @@ pub fn run() {
             estado_cuenta_todos,
             registrar_abono,
             historial_pagos,
+            registrar_devolucion,
+            listar_ventas_empresa,
+            detalle_venta,
+            listar_devoluciones,
             caja_abierta,
             abrir_caja,
             cerrar_caja,

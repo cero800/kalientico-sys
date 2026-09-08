@@ -10,8 +10,10 @@ use crate::validators;
 use rusqlite::{params, Connection, OptionalExtension};
 
 /// Estado de cuenta de un cliente: facturado, pagado y saldo derivado.
-/// El total facturado es en US$ (base); los pagos (que pueden ser en Bs) se
-/// convierten a US$ usando la tasa congelada de CADA pago.
+/// El total facturado es en US$ (base); las devoluciones lo reducen; los pagos
+/// (que pueden ser en Bs) se convierten a US$ usando la tasa congelada de CADA
+/// pago. El saldo nunca es negativo (devoluciones de contado no generan
+/// "crédito a favor").
 pub fn estado_cuenta(conn: &Connection, empresa_id: i64) -> Result<EstadoCuenta, String> {
     let (nombre, dias_credito): (String, i64) = conn
         .query_row(
@@ -23,19 +25,21 @@ pub fn estado_cuenta(conn: &Connection, empresa_id: i64) -> Result<EstadoCuenta,
         .map_err(|e| e.to_string())?
         .ok_or("Empresa no encontrada")?;
 
-    let (facturado, pagado_f): (i64, f64) = conn
+    let (ventas, devuelto, pagado_f): (i64, i64, f64) = conn
         .query_row(
             "SELECT
                 COALESCE((SELECT SUM(total) FROM ventas WHERE empresa_id = ?1 AND estado = 'entregada'), 0),
+                COALESCE((SELECT SUM(monto) FROM devoluciones WHERE empresa_id = ?1), 0),
                 COALESCE((SELECT SUM(CASE WHEN moneda = 'usd' THEN monto
                                           ELSE monto / tasa_cambio END)
                           FROM pagos WHERE empresa_id = ?1), 0)",
             params![empresa_id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .map_err(|e| e.to_string())?;
+    let facturado = ventas - devuelto;
     let pagado = pagado_f.round() as i64;
-    let saldo = facturado - pagado;
+    let saldo = (facturado - pagado).max(0);
     let vencido = vencido_fifo(conn, empresa_id, dias_credito, pagado)?;
 
     Ok(EstadoCuenta {
@@ -45,33 +49,36 @@ pub fn estado_cuenta(conn: &Connection, empresa_id: i64) -> Result<EstadoCuenta,
         total_pagado: pagado,
         saldo_pendiente: saldo,
         total_vencido: vencido,
-        total_al_dia: saldo - vencido,
+        total_al_dia: (saldo - vencido).max(0),
         dias_credito,
     })
 }
 
 /// Estados de cuenta de todos los clientes (deudores o no). Los pagos en Bs se
-/// convierten a US$ con la tasa congelada de cada pago.
+/// convierten a US$ con la tasa congelada de cada pago. Las devoluciones reducen
+/// el facturado y el saldo nunca es negativo.
 pub fn estado_cuenta_todos(conn: &Connection) -> Result<Vec<EstadoCuenta>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT e.id, e.nombre_comercial, e.dias_credito,
                     COALESCE((SELECT SUM(total) FROM ventas WHERE empresa_id = e.id AND estado='entregada'), 0) as fact,
+                    COALESCE((SELECT SUM(monto) FROM devoluciones WHERE empresa_id = e.id), 0) as dev,
                     COALESCE((SELECT SUM(CASE WHEN moneda = 'usd' THEN monto
                                               ELSE monto / tasa_cambio END)
                               FROM pagos WHERE empresa_id = e.id), 0) as pag
-             FROM empresas e WHERE e.activo = 1 ORDER BY (fact - pag) DESC",
+             FROM empresas e WHERE e.activo = 1 ORDER BY (fact - dev - pag) DESC",
         )
         .map_err(|e| e.to_string())?;
     let filas = stmt
         .query_map([], |r| {
             let fact: i64 = r.get(3)?;
-            let pag_f: f64 = r.get(4)?;
+            let dev: i64 = r.get(4)?;
+            let pag_f: f64 = r.get(5)?;
             Ok((
                 r.get::<_, i64>(0)?,
                 r.get::<_, String>(1)?,
                 r.get::<_, i64>(2)?,
-                fact,
+                fact - dev,
                 pag_f.round() as i64,
             ))
         })
@@ -82,7 +89,8 @@ pub fn estado_cuenta_todos(conn: &Connection) -> Result<Vec<EstadoCuenta>, Strin
     let mut ventas: HashMap<i64, Vec<(i64, bool)>> = HashMap::new();
     let mut stmt2 = conn
         .prepare(
-            "SELECT v.empresa_id, v.total,
+            "SELECT v.empresa_id,
+                    v.total - COALESCE((SELECT SUM(monto) FROM devoluciones WHERE venta_id = v.id), 0),
                     (date('now') <= date(v.fecha, '+' || e.dias_credito || ' days'))
              FROM ventas v JOIN empresas e ON e.id = v.empresa_id
              WHERE v.estado = 'entregada' AND e.activo = 1
@@ -106,7 +114,7 @@ pub fn estado_cuenta_todos(conn: &Connection) -> Result<Vec<EstadoCuenta>, Strin
     Ok(filas
         .into_iter()
         .map(|(empresa_id, nombre_comercial, dias_credito, fact, pag)| {
-            let saldo = fact - pag;
+            let saldo = (fact - pag).max(0);
             let vencido = calcular_vencido(
                 ventas.get(&empresa_id).map(Vec::as_slice).unwrap_or(&[]),
                 pag,
@@ -118,7 +126,7 @@ pub fn estado_cuenta_todos(conn: &Connection) -> Result<Vec<EstadoCuenta>, Strin
                 total_pagado: pag,
                 saldo_pendiente: saldo,
                 total_vencido: vencido,
-                total_al_dia: saldo - vencido,
+                total_al_dia: (saldo - vencido).max(0),
                 dias_credito,
             }
         })
@@ -127,6 +135,7 @@ pub fn estado_cuenta_todos(conn: &Connection) -> Result<Vec<EstadoCuenta>, Strin
 
 /// Vencido de un solo cliente (para `estado_cuenta`).
 /// `fecha` si vence: la venta está "al día" si `hoy <= fecha + dias_credito`.
+/// Cada factura entra al FIFO por su saldo ajustado (total menos lo devuelto).
 fn vencido_fifo(
     conn: &Connection,
     empresa_id: i64,
@@ -135,9 +144,10 @@ fn vencido_fifo(
 ) -> Result<i64, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT total, (date('now') <= date(fecha, '+' || ?1 || ' days'))
-             FROM ventas WHERE empresa_id = ?2 AND estado = 'entregada'
-             ORDER BY fecha ASC, id ASC",
+            "SELECT v.total - COALESCE((SELECT SUM(monto) FROM devoluciones WHERE venta_id = v.id), 0),
+                    (date('now') <= date(v.fecha, '+' || ?1 || ' days'))
+             FROM ventas v WHERE v.empresa_id = ?2 AND v.estado = 'entregada'
+             ORDER BY v.fecha ASC, v.id ASC",
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt

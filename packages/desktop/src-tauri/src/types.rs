@@ -171,6 +171,54 @@ pub struct PagoLinea {
     pub fecha_pago: Option<String>,
 }
 
+// ---- Devoluciones ----
+// Ajuste por panes deteriorados/extraviados devueltos por el cliente. Resta del
+// total facturado de la empresa (baja el saldo si hay deuda); no toca stock ni caja.
+
+/// Input para registrar una devolución vinculada a una factura concreta.
+#[derive(Deserialize)]
+pub struct DevolucionInput {
+    pub empresa_id: i64,
+    pub venta_id: i64,
+    pub monto: i64, // centavos US$
+    pub motivo: Option<String>,
+    pub operador_id: i64,
+}
+
+/// Devolución registrada (para el historial).
+#[derive(Serialize, Debug)]
+pub struct Devolucion {
+    pub id: i64,
+    pub empresa_id: i64,
+    pub venta_id: i64,
+    pub numero_factura: i64,
+    pub monto: i64,
+    pub motivo: Option<String>,
+    pub operador_id: i64,
+    pub fecha_devolucion: Option<String>,
+}
+
+/// Una factura entregada con lo ya devuelto, para saber cuánto queda por devolver.
+#[derive(Serialize)]
+pub struct VentaDevolucion {
+    pub venta_id: i64,
+    pub numero_factura: i64,
+    pub tipo: String,
+    pub fecha: String,
+    pub total: i64,
+    pub devuelto: i64,
+}
+
+/// Línea del detalle de una venta para el modal de devolución.
+#[derive(Serialize)]
+pub struct DetalleVentaDevolucion {
+    pub producto_id: i64,
+    pub nombre: String,
+    pub cantidad: f64,
+    pub precio_unitario: i64,
+    pub subtotal: i64,
+}
+
 // ---- Caja ----
 // Arqueo por moneda: cada caja registra efectivo US$ y Bs por separado.
 // La diferencia es siempre derivada (final - esperado) por moneda.

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { estadoCuentaTodos, registrarAbono } from '../services/db';
+import { estadoCuentaTodos, registrarAbono, registrarDevolucion, detalleVenta, listarVentasEmpresa, listarDevoluciones } from '../services/db';
 import { useSesion } from '../store/sesion';
 import DeudoresPage from './DeudoresPage';
 
@@ -14,10 +14,17 @@ vi.mock('../services/db', () => ({
     { id: 1, venta_id: 10, numero_factura: 3, monto: 5000, tipo_pago: 'efectivo', moneda: 'ves', tasa_cambio: 36.85, fecha_pago: '2026-09-04' },
   ]),
   registrarAbono: vi.fn(),
+  listarVentasEmpresa: vi.fn().mockResolvedValue([]),
+  listarDevoluciones: vi.fn().mockResolvedValue([]),
+  detalleVenta: vi.fn().mockResolvedValue([]),
+  registrarDevolucion: vi.fn(),
 }));
 
 beforeEach(() => {
   vi.mocked(registrarAbono).mockReset();
+  vi.mocked(registrarDevolucion).mockReset();
+  vi.mocked(listarVentasEmpresa).mockResolvedValue([]);
+  vi.mocked(detalleVenta).mockResolvedValue([]);
   useSesion.setState({ operador: { id: 1, nombre: 'Ana', rol: 'admin', activo: true } });
 });
 
@@ -159,5 +166,74 @@ describe('DeudoresPage', () => {
     const dialog = screen.getByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Abonar restante' }));
     expect(within(dialog).getByLabelText(/Monto abono 1/)).toHaveValue('200,00');
+  });
+
+  it('lista facturas entregadas con su botón Devolver', async () => {
+    vi.mocked(listarVentasEmpresa).mockResolvedValue([
+      { venta_id: 10, numero_factura: 3, tipo: 'credito', fecha: '2026-09-04', total: 5000, devuelto: 0 },
+    ] as never);
+    const user = userEvent.setup();
+    render(<DeudoresPage />);
+    await user.click(await screen.findByText('Café del Centro'));
+    expect(await screen.findByRole('button', { name: /Devolver factura 3/ })).toBeInTheDocument();
+    expect(screen.getByText('Crédito')).toBeInTheDocument();
+  });
+
+  it('registra una devolución calculando el monto por cantidad', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listarVentasEmpresa).mockResolvedValue([
+      { venta_id: 10, numero_factura: 3, tipo: 'credito', fecha: '2026-09-04', total: 1000, devuelto: 0 },
+    ] as never);
+    vi.mocked(detalleVenta).mockResolvedValue([
+      { producto_id: 1, nombre: 'Pan Canilla', cantidad: 10, precio_unitario: 100, subtotal: 1000 },
+    ] as never);
+    render(<DeudoresPage />);
+    await user.click(await screen.findByText('Café del Centro'));
+    await user.click(await screen.findByRole('button', { name: /Devolver factura 3/ }));
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/Devolver Pan Canilla/), '5');
+    await user.click(within(dialog).getByRole('button', { name: 'Registrar devolución' }));
+
+    expect(registrarDevolucion).toHaveBeenCalledWith({
+      empresa_id: 2,
+      venta_id: 10,
+      monto: 500,
+      motivo: null,
+      operador_id: 1,
+    });
+  });
+
+  it('bloquea devolución con cantidad mayor a la vendida', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listarVentasEmpresa).mockResolvedValue([
+      { venta_id: 10, numero_factura: 3, tipo: 'contado', fecha: '2026-09-04', total: 1000, devuelto: 0 },
+    ] as never);
+    vi.mocked(detalleVenta).mockResolvedValue([
+      { producto_id: 1, nombre: 'Pan Canilla', cantidad: 10, precio_unitario: 100, subtotal: 1000 },
+    ] as never);
+    render(<DeudoresPage />);
+    await user.click(await screen.findByText('Café del Centro'));
+    await user.click(await screen.findByRole('button', { name: /Devolver factura 3/ }));
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/Devolver Pan Canilla/), '15');
+    expect(within(dialog).getByText(/cantidad devuelta no puede superar/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Registrar devolución' })).toBeDisabled();
+    expect(registrarDevolucion).not.toHaveBeenCalled();
+  });
+
+  it('muestra las devoluciones ya registradas de la empresa', async () => {
+    vi.mocked(listarVentasEmpresa).mockResolvedValue([
+      { venta_id: 10, numero_factura: 3, tipo: 'credito', fecha: '2026-09-04', total: 5000, devuelto: 1000 },
+    ] as never);
+    vi.mocked(listarDevoluciones).mockResolvedValue([
+      { id: 1, empresa_id: 2, venta_id: 10, numero_factura: 3, monto: 1000, motivo: 'pan deteriorado', operador_id: 1, fecha_devolucion: '2026-09-05' },
+    ] as never);
+    const user = userEvent.setup();
+    render(<DeudoresPage />);
+    await user.click(await screen.findByText('Café del Centro'));
+    expect(await screen.findByText(/pan deteriorado/)).toBeInTheDocument();
+    expect(screen.getAllByText('-$10.00').length).toBeGreaterThan(0);
   });
 });

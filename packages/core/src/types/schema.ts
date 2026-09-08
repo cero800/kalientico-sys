@@ -181,6 +181,46 @@ export interface PagoLinea {
 }
 
 //---------------------------------------------------------------------------
+// Devoluciones (panes deteriorados/extraviados)
+//---------------------------------------------------------------------------
+
+export interface DevolucionInput {
+  empresa_id: number;
+  venta_id: number;
+  monto: number;
+  motivo: string | null;
+  operador_id: number;
+}
+
+export interface Devolucion {
+  id: number;
+  empresa_id: number;
+  venta_id: number;
+  numero_factura: number;
+  monto: number;
+  motivo: string | null;
+  operador_id: number;
+  fecha_devolucion: string | null;
+}
+
+export interface VentaDevolucion {
+  venta_id: number;
+  numero_factura: number;
+  tipo: 'contado' | 'credito';
+  fecha: string;
+  total: number;
+  devuelto: number;
+}
+
+export interface DetalleVentaDevolucion {
+  producto_id: number;
+  nombre: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+}
+
+//---------------------------------------------------------------------------
 // Usuarios
 //---------------------------------------------------------------------------
 

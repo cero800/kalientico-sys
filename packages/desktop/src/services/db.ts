@@ -10,6 +10,9 @@ import type {
   CajaCerrarInput,
   CierreDia,
   ConfigurarAdminInput,
+  DetalleVentaDevolucion,
+  Devolucion,
+  DevolucionInput,
   Empresa,
   EmpresaInput,
   EstadoCuenta,
@@ -24,6 +27,7 @@ import type {
   Usuario,
   UsuarioInput,
   Venta,
+  VentaDevolucion,
   VentaInput,
 } from '@panaderia/core';
 
@@ -35,7 +39,10 @@ export type {
   CierreAbono,
   CierreDia,
   ConfigurarAdminInput,
+  DetalleVentaDevolucion,
   DetalleVentaInput,
+  Devolucion,
+  DevolucionInput,
   Empresa,
   EmpresaInput,
   EstadoCuenta,
@@ -53,10 +60,11 @@ export type {
   ResumenDia,
   ResumenDiaVenta,
   StockItem,
-  UnidadMedida,
+UnidadMedida,
   Usuario,
   UsuarioInput,
   Venta,
+  VentaDevolucion,
   VentaInput,
 } from '@panaderia/core';
 
@@ -126,6 +134,16 @@ export const estadoCuenta = (empresa_id: number) => invoke<EstadoCuenta>('estado
 export const estadoCuentaTodos = () => invoke<EstadoCuenta[]>('estado_cuenta_todos');
 export const registrarAbono = (abono: AbonoInput) => invoke('registrar_abono', { abono });
 export const historialPagos = (empresa_id: number) => invoke<PagoLinea[]>('historial_pagos', { empresa_id });
+
+// Devoluciones
+export const registrarDevolucion = (devolucion: DevolucionInput) =>
+  invoke<Devolucion>('registrar_devolucion', { devolucion });
+export const listarVentasEmpresa = (empresa_id: number) =>
+  invoke<VentaDevolucion[]>('listar_ventas_empresa', { empresa_id });
+export const detalleVenta = (venta_id: number) =>
+  invoke<DetalleVentaDevolucion[]>('detalle_venta', { venta_id });
+export const listarDevoluciones = (empresa_id: number) =>
+  invoke<Devolucion[]>('listar_devoluciones', { empresa_id });
 
 // Caja
 export const cajaAbierta = () => invoke<Caja | null>('caja_abierta');

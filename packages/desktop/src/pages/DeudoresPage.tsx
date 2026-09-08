@@ -1,8 +1,25 @@
 import { useEffect, useState } from 'react';
-import { Plus, RefreshCw, Trash2, Wallet } from 'lucide-react';
-import type { AbonoInput, EstadoCuenta, PagoLinea, Moneda, TipoPago } from '@panaderia/core';
+import { Plus, RefreshCw, Trash2, Undo2, Wallet } from 'lucide-react';
+import type {
+  AbonoInput,
+  DetalleVentaDevolucion,
+  Devolucion,
+  EstadoCuenta,
+  PagoLinea,
+  Moneda,
+  TipoPago,
+  VentaDevolucion,
+} from '@panaderia/core';
 import { TIPO_PAGO_LABELS, toUsd, toVes } from '@panaderia/core';
-import { estadoCuentaTodos, historialPagos, registrarAbono } from '../services/db';
+import {
+  estadoCuentaTodos,
+  historialPagos,
+  listarDevoluciones,
+  listarVentasEmpresa,
+  detalleVenta,
+  registrarAbono,
+  registrarDevolucion,
+} from '../services/db';
 import { formatCents, formatUsdCents, formatVesCents, parseCentsInput } from '../lib/format';
 import type { MontoPago } from '../lib/pago';
 import { useSesion } from '../store/sesion';
@@ -22,6 +39,11 @@ interface PagoForm {
   tipo_pago: TipoPago;
   monto: string;
   numero_referencia: string;
+}
+
+interface LineaDev {
+  detalle: DetalleVentaDevolucion;
+  devuelve: string;
 }
 
 let siguienteId = 1;
@@ -52,21 +74,42 @@ export default function DeudoresPage() {
   const [cargando, setCargando] = useState(true);
   const [seleccion, setSeleccion] = useState<EstadoCuenta | null>(null);
   const [historial, setHistorial] = useState<PagoLinea[]>([]);
+  const [ventas, setVentas] = useState<VentaDevolucion[]>([]);
+  const [devoluciones, setDevoluciones] = useState<Devolucion[]>([]);
   const [abonoAbierto, setAbonoAbierto] = useState(false);
   const [pagos, setPagos] = useState<PagoForm[]>([pagoVacio()]);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [devAbierto, setDevAbierto] = useState(false);
+  const [devVenta, setDevVenta] = useState<VentaDevolucion | null>(null);
+  const [devLineas, setDevLineas] = useState<LineaDev[]>([]);
+  const [devMotivo, setDevMotivo] = useState('');
+  const [devError, setDevError] = useState<string | null>(null);
+  const [devGuardando, setDevGuardando] = useState(false);
 
   const cargar = () => estadoCuentaTodos().then(setDeudores).finally(() => setCargando(false));
   useEffect(() => {
     cargar();
   }, []);
 
+  const cargarHistorial = async (empresaId: number) => {
+    const [pagos, facturas, devs] = await Promise.allSettled([
+      historialPagos(empresaId),
+      listarVentasEmpresa(empresaId),
+      listarDevoluciones(empresaId),
+    ]);
+    setHistorial(pagos.status === 'fulfilled' ? pagos.value : []);
+    setVentas(facturas.status === 'fulfilled' ? facturas.value : []);
+    setDevoluciones(devs.status === 'fulfilled' ? devs.value : []);
+  };
+
   const ver = async (d: EstadoCuenta) => {
     setSeleccion(d);
     setHistorial([]);
+    setVentas([]);
+    setDevoluciones([]);
     try {
-      setHistorial(await historialPagos(d.empresa_id));
+      await cargarHistorial(d.empresa_id);
     } catch {
       setHistorial([]);
     }
@@ -81,7 +124,7 @@ export default function DeudoresPage() {
     setSeleccion(actual ?? null);
     if (actual) {
       try {
-        setHistorial(await historialPagos(empresaId));
+        await cargarHistorial(empresaId);
       } catch {
         setHistorial([]);
       }
@@ -92,6 +135,40 @@ export default function DeudoresPage() {
     setPagos([pagoVacio()]);
     setError(null);
     setAbonoAbierto(true);
+  };
+
+  const abrirDevolucion = async (v: VentaDevolucion) => {
+    setDevError(null);
+    setDevMotivo('');
+    setDevVenta(v);
+    try {
+      const lineas = await detalleVenta(v.venta_id);
+      setDevLineas(lineas.map((l) => ({ detalle: l, devuelve: '0' })));
+      setDevAbierto(true);
+    } catch (e) {
+      setDevError(String(e));
+    }
+  };
+
+  const guardarDevolucion = async () => {
+    if (!seleccion || !devVenta) return;
+    setDevGuardando(true);
+    setDevError(null);
+    try {
+      await registrarDevolucion({
+        empresa_id: seleccion.empresa_id,
+        venta_id: devVenta.venta_id,
+        monto: totalDevUsd,
+        motivo: devMotivo.trim() || null,
+        operador_id: operadorId,
+      });
+      setDevAbierto(false);
+      await refrescar(seleccion.empresa_id);
+    } catch (e) {
+      setDevError(String(e));
+    } finally {
+      setDevGuardando(false);
+    }
   };
 
   const cambiar = (id: number, parcial: Partial<PagoForm>) =>
@@ -152,6 +229,19 @@ export default function DeudoresPage() {
   const puedeGuardarAbono =
     !guardando && pagadoUsd > 0 && !superaSaldo && !referenciaFaltante && todosMontosValidos;
   const aBs = (usd: number) => (tasaValida ? toVes(usd, 'usd', tasa) : null);
+
+  const devolvible = (devVenta?.total ?? 0) - (devVenta?.devuelto ?? 0);
+  const totalDevUsd = devLineas.reduce((acc, l) => {
+    const n = Number(l.devuelve.replace(',', '.'));
+    return acc + (Number.isFinite(n) && n > 0 ? Math.round(n * l.detalle.precio_unitario) : 0);
+  }, 0);
+  const cantidadesDevInvalidas = devLineas.some((l) => {
+    const n = Number(l.devuelve.replace(',', '.'));
+    return l.devuelve.trim() === '' || !Number.isFinite(n) || n < 0 || n > l.detalle.cantidad;
+  });
+  const excedeDevolucion = totalDevUsd > devolvible;
+  const puedeGuardarDevolucion =
+    !devGuardando && totalDevUsd > 0 && !cantidadesDevInvalidas && !excedeDevolucion;
 
   if (cargando) return <PageLoader />;
 
@@ -267,6 +357,71 @@ export default function DeudoresPage() {
             </Table>
           )}
         </Card>
+
+        <Card>
+          <CardHeader
+            title={seleccion ? `Facturas — ${seleccion.nombre_comercial}` : 'Facturas y devoluciones'}
+            subtitle="Devoluciones por panes deteriorados/extraviados"
+          />
+          {!seleccion ? (
+            <EmptyState message="Selecciona un cliente" />
+          ) : ventas.length === 0 ? (
+            <EmptyState message="Sin facturas entregadas" />
+          ) : (
+            <Table>
+              <THead>
+                <tr>
+                  <Th>Factura</Th>
+                  <Th>Tipo</Th>
+                  <Th className="text-right">Total</Th>
+                  <Th className="text-right">Devuelto</Th>
+                  <Th className="text-right"></Th>
+                </tr>
+              </THead>
+              <tbody>
+                {ventas.map((v) => (
+                  <tr key={v.venta_id} className="border-b border-gray-50 last:border-0">
+                    <Td className="font-mono text-xs">#{v.numero_factura}</Td>
+                    <Td>
+                      <Badge tone={v.tipo === 'credito' ? 'amber' : 'blue'}>{v.tipo === 'credito' ? 'Crédito' : 'Contado'}</Badge>
+                    </Td>
+                    <Td className="text-right">{formatUsdCents(v.total)}</Td>
+                    <Td className={`text-right ${v.devuelto > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                      {v.devuelto > 0 ? `-${formatUsdCents(v.devuelto)}` : '—'}
+                    </Td>
+                    <Td className="text-right">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => abrirDevolucion(v)}
+                        disabled={v.total - v.devuelto <= 0}
+                        aria-label={`Devolver factura ${v.numero_factura}`}
+                      >
+                        <Undo2 className="h-3.5 w-3.5" /> Devolver
+                      </Button>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+          {devoluciones.length > 0 && (
+            <div className="mt-4 border-t border-gray-100 pt-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Devoluciones registradas</p>
+              <ul className="space-y-1.5">
+                {devoluciones.map((d) => (
+                  <li key={d.id} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">
+                      Factura #{d.numero_factura}
+                      {d.motivo ? ` · ${d.motivo}` : ''}
+                    </span>
+                    <span className="font-semibold text-red-600">-{formatUsdCents(d.monto)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
       </div>
 
       <Modal open={abonoAbierto} title="Registrar abono" onClose={() => setAbonoAbierto(false)} footer={<>
@@ -377,6 +532,84 @@ export default function DeudoresPage() {
             <p className="text-xs text-red-600">El abono supera el saldo pendiente ({formatUsdCents(saldoUsd)})</p>
           )}
           {referenciaFaltante && <p className="text-xs text-red-600">El pago móvil requiere el número de referencia</p>}
+        </div>
+      </Modal>
+
+      <Modal
+        open={devAbierto}
+        title={`Devolución — factura #${devVenta?.numero_factura ?? ''}`}
+        onClose={() => setDevAbierto(false)}
+        footer={<>
+          <Button variant="secondary" onClick={() => setDevAbierto(false)}>Cancelar</Button>
+          <Button onClick={guardarDevolucion} disabled={!puedeGuardarDevolucion}>
+            {devGuardando ? 'Guardando…' : 'Registrar devolución'}
+          </Button>
+        </>}
+      >
+        <div className="space-y-3">
+          {devError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{devError}</p>}
+
+          <div className="flex items-center justify-between rounded-lg bg-gray-50 p-3 text-sm">
+            <span className="text-gray-600">Devoluble de la factura</span>
+            <span className="font-bold text-gray-900">{formatUsdCents(devolvible)}</span>
+          </div>
+
+          <div className="space-y-2">
+            {devLineas.map((l, i) => {
+              const n = Number(l.devuelve.replace(',', '.'));
+              const invalida = l.devuelve.trim() !== '' && (!Number.isFinite(n) || n < 0 || n > l.detalle.cantidad);
+              const subtotal = Number.isFinite(n) && n > 0 ? Math.round(n * l.detalle.precio_unitario) : 0;
+              return (
+                <div key={l.detalle.producto_id} className="flex items-center gap-2 rounded-lg border border-gray-200 p-2">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{l.detalle.nombre}</p>
+                    <p className="text-xs text-gray-500">
+                      Vendidos: {l.detalle.cantidad} · {formatUsdCents(l.detalle.subtotal)}
+                    </p>
+                  </div>
+                  <div className="w-28">
+                    <Input
+                      aria-label={`Devolver ${l.detalle.nombre}`}
+                      value={l.devuelve}
+                      onChange={(e) =>
+                        setDevLineas((prev) => prev.map((x, j) => (j === i ? { ...x, devuelve: e.target.value } : x)))
+                      }
+                      inputMode="decimal"
+                      error={invalida ? 'Cantidad inválida' : undefined}
+                    />
+                  </div>
+                  <span className="w-24 text-right text-sm font-semibold text-gray-700">{formatUsdCents(subtotal)}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Motivo (opcional)</label>
+            <Input
+              aria-label="Motivo de la devolución"
+              value={devMotivo}
+              onChange={(e) => setDevMotivo(e.target.value)}
+              placeholder="p. ej. pan deteriorado"
+            />
+          </div>
+
+          <div className="flex justify-between rounded-lg bg-red-50 p-3 text-sm">
+            <span className="text-gray-600">Total a devolver</span>
+            <strong className="text-red-700">{formatUsdCents(totalDevUsd)}</strong>
+          </div>
+
+          {cantidadesDevInvalidas && (
+            <p className="text-xs text-red-600">La cantidad devuelta no puede superar la vendida por producto</p>
+          )}
+          {excedeDevolucion && (
+            <p className="text-xs text-red-600">
+              La devolución supera el monto devoluble de la factura ({formatUsdCents(devolvible)})
+            </p>
+          )}
+          {totalDevUsd === 0 && devLineas.length > 0 && (
+            <p className="text-xs text-gray-500">Indica una cantidad mayor a 0 para registrar la devolución</p>
+          )}
         </div>
       </Modal>
     </div>
