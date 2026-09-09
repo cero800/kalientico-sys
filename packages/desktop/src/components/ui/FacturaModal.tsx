@@ -132,24 +132,24 @@ export function FacturaModal({ factura, onClose }: Props) {
         aria-label={`Factura ${factura.numero_factura}`}
         className="relative flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-xl"
       >
-        <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-3">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-gray-100 px-5 py-3">
+          <div className="min-w-0">
             <h2 className="text-sm font-semibold text-gray-900">Factura</h2>
-            <p className="text-xs text-gray-500">Venta #{factura.venta_id} · {factura.fecha.slice(0, 10)}</p>
+            <p className="truncate text-xs text-gray-500">Venta #{factura.venta_id} · {factura.fecha.slice(0, 10)}</p>
             {rutaPdf && (
-              <p className="mt-0.5 text-xs text-emerald-600">PDF guardado en {rutaPdf}</p>
+              <p className="mt-0.5 truncate text-xs text-emerald-600">PDF guardado en {rutaPdf}</p>
             )}
             {errorPdf && (
-              <p className="mt-0.5 text-xs text-red-600">No se pudo guardar el PDF: {errorPdf}</p>
+              <p className="mt-0.5 truncate text-xs text-red-600">No se pudo guardar el PDF: {errorPdf}</p>
             )}
             {ticketMsg && (
-              <p className={`mt-0.5 text-xs ${ticketMsg.tipo === 'ok' ? 'text-emerald-600' : 'text-red-600'}`}>
+              <p className={`mt-0.5 truncate text-xs ${ticketMsg.tipo === 'ok' ? 'text-emerald-600' : 'text-red-600'}`}>
                 {ticketMsg.texto}
                 {ticketMsg.tipo === 'error' && (
                   <button
                     type="button"
                     onClick={() => setConfigAbierto(true)}
-                    className="ml-2 font-medium underline underline-offset-2"
+                    className="ml-2 font-medium whitespace-nowrap underline underline-offset-2"
                   >
                     Configurar impresora
                   </button>
@@ -157,15 +157,15 @@ export function FacturaModal({ factura, onClose }: Props) {
               </p>
             )}
           </div>
-          <div className="flex gap-2">
-            <Button onClick={guardarPdf} disabled={guardandoPdf}>
-              <FileDown className="h-4 w-4" /> {guardandoPdf ? 'Guardando…' : 'Guardar PDF'}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button size="sm" onClick={guardarPdf} disabled={guardandoPdf}>
+              <FileDown className="h-3.5 w-3.5" /> {guardandoPdf ? 'Guardando…' : 'Guardar PDF'}
             </Button>
-            <Button variant="secondary" onClick={enviarTicket} disabled={ticketEnviando}>
-              <Receipt className="h-4 w-4" /> {ticketEnviando ? 'Enviando…' : 'Térmica'}
+            <Button size="sm" variant="secondary" onClick={enviarTicket} disabled={ticketEnviando}>
+              <Receipt className="h-3.5 w-3.5" /> {ticketEnviando ? 'Enviando…' : 'Térmica'}
             </Button>
-            <Button onClick={imprimir} disabled={imprimiendo}>
-              <Printer className="h-4 w-4" /> Imprimir
+            <Button size="sm" onClick={imprimir} disabled={imprimiendo}>
+              <Printer className="h-3.5 w-3.5" /> Imprimir
             </Button>
             <Button variant="ghost" size="sm" onClick={onClose} aria-label="Cerrar">
               <X className="h-4 w-4" />
