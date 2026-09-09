@@ -35,11 +35,14 @@ const caja = {
 const resumen = {
   producciones: [],
   ventas: [
-    { venta_id: 1, numero_factura: 1, cliente: 'Mostrador', tipo: 'contado', monto: 5000, estado: 'entregada', tasa_cambio: 36.85 },
-    { venta_id: 2, numero_factura: 2, cliente: 'Pan S.A.', tipo: 'credito', monto: 3000, estado: 'entregada', tasa_cambio: 36.85 },
+    { venta_id: 1, numero_factura: 1, cliente: 'Mostrador', tipo: 'contado', monto: 5000, devuelto: 0, estado: 'entregada', tasa_cambio: 36.85 },
+    { venta_id: 2, numero_factura: 2, cliente: 'Pan S.A.', tipo: 'credito', monto: 3000, devuelto: 1000, estado: 'entregada', tasa_cambio: 36.85 },
   ],
   pagos_efectivo_usd: 5000,
   pagos_efectivo_ves: 36850,
+  devoluciones: [
+    { id: 1, venta_id: 2, numero_factura: 2, cliente: 'Pan S.A.', monto: 1000, motivo: 'pan deteriorado', operador_nombre: 'Ana', fecha_devolucion: '2026-09-04', detalle: [{ producto_id: 3, nombre: 'Pan Canilla', cantidad: 5, precio_unitario: 200, subtotal: 1000 }] },
+  ],
   deudores: [],
 };
 
@@ -61,10 +64,13 @@ const cierre = {
   efectivo_esperado_ves: 36850,
   ventas: resumen.ventas,
   abonos: [],
+  devoluciones: resumen.devoluciones,
   total_ventas_usd: 8000,
   total_ventas_bs: 294800,
   total_abonos_usd: 0,
   total_abonos_bs: 0,
+  total_devoluciones_usd: 1000,
+  total_devoluciones_bs: 36850,
   tasa_cierre: 36.85,
 };
 
@@ -138,5 +144,25 @@ describe('CerrarCajaPage', () => {
     await user.type(tasaInput, '0');
     expect(screen.getByText('Tasa inválida')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cerrar caja/ })).toBeDisabled();
+  });
+
+  it('muestra devoluciones y ventas netas en la cuenta del día y el cierre', async () => {
+    const user = userEvent.setup();
+    renderPagina();
+    await screen.findByText('Cuenta del día');
+
+    expect(screen.getByText('Devoluciones del día (perdido)')).toBeInTheDocument();
+    expect(screen.getByText(/pan deteriorado/)).toBeInTheDocument();
+    expect(screen.getAllByText('-$10.00').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$70.00').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Pan Canilla × 5/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Cerrar caja/ }));
+    await user.click(screen.getByRole('button', { name: /Sí, cerrar/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Cierre de caja/ });
+    expect(within(dialog).getByText(/Devoluciones del día \(perdido\)/)).toBeInTheDocument();
+    expect(within(dialog).getByText('Ventas netas (ganado)')).toBeInTheDocument();
+    expect(within(dialog).getAllByText(/^\$70\.00/).length).toBeGreaterThan(0);
   });
 });

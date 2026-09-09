@@ -4,9 +4,85 @@
 // original. Saldo = facturado - pagado - devoluciones (sin saldos negativos).
 
 use crate::repo;
-use crate::types::{DetalleVentaDevolucion, Devolucion, DevolucionInput, VentaDevolucion};
+use crate::types::{
+    DetalleDevolucion, DetalleVentaDevolucion, Devolucion, DevolucionInput, VentaDevolucion,
+};
 use crate::validators;
 use rusqlite::{params, Connection, OptionalExtension};
+
+/// Valida el detalle: cantidad > 0, subtotales no negativos y que la suma de
+/// subtotales (precio_unitario * cantidad redondeado) iguale el monto total.
+fn validar_detalle(
+    detalle: &[crate::types::DetalleDevolucionInput],
+    monto: i64,
+) -> Result<(), String> {
+    let mut suma: i64 = 0;
+    for l in detalle {
+        validators::validar_monto_positivo(l.precio_unitario, "Precio unitario de la devolución")?;
+        if l.cantidad <= 0.0 {
+            return Err("Cantidad a devolver debe ser mayor que 0 para cada producto".to_string());
+        }
+        suma += (l.cantidad * l.precio_unitario as f64).round() as i64;
+    }
+    if suma != monto {
+        return Err(format!(
+            "El detalle ({suma} centavos US$) no coincide con el monto de la devolución ({monto} centavos US$)"
+        ));
+    }
+    Ok(())
+}
+
+/// Inserta las líneas de detalle ya validadas. Debe ir dentro de la transacción.
+fn insertar_detalle(
+    tx: &rusqlite::Transaction,
+    devolucion_id: i64,
+    detalle: &[crate::types::DetalleDevolucionInput],
+) -> Result<(), String> {
+    for l in detalle {
+        tx.execute(
+            "INSERT INTO detalle_devoluciones (devolucion_id, producto_id, cantidad, precio_unitario, subtotal)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                devolucion_id,
+                l.producto_id,
+                l.cantidad,
+                l.precio_unitario,
+                (l.cantidad * l.precio_unitario as f64).round() as i64
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Líneas de detalle (productos devueltos) de una devolución.
+pub fn detalle_devolucion(
+    conn: &Connection,
+    devolucion_id: i64,
+) -> Result<Vec<DetalleDevolucion>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT dd.producto_id, p.nombre, dd.cantidad, dd.precio_unitario, dd.subtotal
+             FROM detalle_devoluciones dd
+             JOIN productos p ON p.id = dd.producto_id
+             WHERE dd.devolucion_id = ?1
+             ORDER BY dd.id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![devolucion_id], |r| {
+            Ok(DetalleDevolucion {
+                producto_id: r.get(0)?,
+                nombre: r.get(1)?,
+                cantidad: r.get(2)?,
+                precio_unitario: r.get(3)?,
+                subtotal: r.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<rusqlite::Result<Vec<DetalleDevolucion>>>()
+        .map_err(|e| e.to_string())
+}
 
 /// Registra una devolución vinculada a una factura entregada.
 /// Regla: lo devuelto de una factura no puede superar su total original
@@ -17,6 +93,10 @@ pub fn registrar_devolucion(
 ) -> Result<Devolucion, String> {
     validators::validar_monto_positivo(d.monto, "Monto de la devolución")?;
     repo::empresa_existe(conn, d.empresa_id)?;
+
+    if let Some(detalle) = &d.detalle {
+        validar_detalle(detalle, d.monto)?;
+    }
 
     let venta: (i64, i64, String) = conn
         .query_row(
@@ -54,6 +134,10 @@ pub fn registrar_devolucion(
     )
     .map_err(|e| e.to_string())?;
     let id = tx.last_insert_rowid();
+
+    if let Some(detalle) = &d.detalle {
+        insertar_detalle(&tx, id, detalle)?;
+    }
     tx.commit().map_err(|e| e.to_string())?;
 
     Ok(Devolucion {
@@ -71,6 +155,17 @@ pub fn registrar_devolucion(
         motivo: d.motivo.clone(),
         operador_id: d.operador_id,
         fecha_devolucion: None,
+        detalle: d.detalle.clone().map_or_else(Vec::new, |det| {
+            det.iter()
+                .map(|l| DetalleDevolucion {
+                    producto_id: l.producto_id,
+                    nombre: String::new(),
+                    cantidad: l.cantidad,
+                    precio_unitario: l.precio_unitario,
+                    subtotal: (l.cantidad * l.precio_unitario as f64).round() as i64,
+                })
+                .collect()
+        }),
     })
 }
 
@@ -134,7 +229,7 @@ pub fn detalle_venta(
         .map_err(|e| e.to_string())
 }
 
-/// Historial de devoluciones de una empresa.
+/// Historial de devoluciones de una empresa (con el detalle de cada una).
 pub fn listar_devoluciones(conn: &Connection, empresa_id: i64) -> Result<Vec<Devolucion>, String> {
     let mut stmt = conn
         .prepare(
@@ -156,11 +251,17 @@ pub fn listar_devoluciones(conn: &Connection, empresa_id: i64) -> Result<Vec<Dev
                 motivo: r.get(5)?,
                 operador_id: r.get(6)?,
                 fecha_devolucion: r.get(7)?,
+                detalle: Vec::new(),
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<rusqlite::Result<Vec<Devolucion>>>()
-        .map_err(|e| e.to_string())
+    let mut devoluciones = Vec::new();
+    for r in rows {
+        let mut dev = r.map_err(|e| e.to_string())?;
+        dev.detalle = detalle_devolucion(conn, dev.id)?;
+        devoluciones.push(dev);
+    }
+    Ok(devoluciones)
 }
 
 #[cfg(test)]
@@ -203,6 +304,7 @@ mod tests {
             monto,
             motivo: motivo.map(String::from),
             operador_id: uid,
+            detalle: None,
         }
     }
 
@@ -343,5 +445,63 @@ mod tests {
         let err =
             registrar_devolucion(&mut conn, &devolucion(eid, vid, -5, None, uid)).unwrap_err();
         assert!(err.contains("mayor que 0"), "{err}");
+    }
+
+    #[test]
+    fn detalle_devolucion_registra_productos_y_suma_debe_coincidir() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        let pid = producto(&conn, 5_00); // Pan a $5,00
+        stock(&conn, pid, 20.0);
+        let vid = crate::ventas::crear_venta(
+            &mut conn,
+            &VentaInput {
+                empresa_id: eid,
+                tipo: "credito".into(),
+                descuento: 0,
+                detalles: vec![DetalleVentaInput {
+                    producto_id: pid,
+                    cantidad: 4.0,
+                }],
+                pagos: vec![],
+                operador_id: uid,
+            },
+        )
+        .unwrap()
+        .id;
+
+        // Devuelve 1 unidad a $5,00 → monto $5.00 = 5_00.
+        let input = DevolucionInput {
+            empresa_id: eid,
+            venta_id: vid,
+            monto: 5_00,
+            motivo: Some("Pan duro".into()),
+            operador_id: uid,
+            detalle: Some(vec![crate::types::DetalleDevolucionInput {
+                producto_id: pid,
+                cantidad: 1.0,
+                precio_unitario: 5_00,
+            }]),
+        };
+        let dev = registrar_devolucion(&mut conn, &input).unwrap();
+        assert_eq!(dev.monto, 5_00);
+        assert_eq!(dev.detalle.len(), 1);
+        assert_eq!(dev.detalle[0].producto_id, pid);
+        assert_eq!(dev.detalle[0].cantidad, 1.0);
+        assert_eq!(dev.detalle[0].subtotal, 5_00);
+
+        // El historial hidrata el detalle con el nombre del producto.
+        let historial = listar_devoluciones(&conn, eid).unwrap();
+        assert_eq!(historial.len(), 1);
+        assert_eq!(historial[0].detalle[0].nombre, "Pan 500");
+
+        // Suma inválida (monto no coincide con el detalle) → rechaza.
+        let mut err_input = input.clone();
+        err_input.monto = 40_00; // detalle suma 5_00
+        let err = registrar_devolucion(&mut conn, &err_input).unwrap_err();
+        assert!(err.contains("no coincide"), "{err}");
     }
 }

@@ -36,6 +36,8 @@ export default function ReportePage() {
   const ventasEntregadas = (dato?.ventas ?? []).filter((v) => v.estado === 'entregada');
   const totalVentas = ventasEntregadas.reduce((acc, v) => acc + v.monto, 0);
   const totalVentasBs = Math.round(ventasEntregadas.reduce((acc, v) => acc + v.monto * v.tasa_cambio, 0));
+  const devolucionUsd = (dato?.devoluciones ?? []).reduce((acc, d) => acc + d.monto, 0);
+  const ventasNetas = Math.max(totalVentas - devolucionUsd, 0);
 
   const abrirFactura = async (ventaId: number) => {
     setCargandoFactura(true);
@@ -62,14 +64,38 @@ export default function ReportePage() {
       ws.addRow([]);
       ws.addRow(['Ventas entregadas', (totalVentas / 100).toFixed(2), 'US$']);
       ws.addRow(['Ventas en Bs', (totalVentasBs / 100).toFixed(2), 'Bs']);
+      ws.addRow(['Devoluciones (perdido)', (devolucionUsd / 100).toFixed(2), 'US$']);
+      ws.addRow(['Ventas netas (ganado)', (ventasNetas / 100).toFixed(2), 'US$']);
       ws.addRow(['Efectivo US$', (dato.pagos_efectivo_usd / 100).toFixed(2), 'US$']);
       ws.addRow(['Efectivo Bs', (dato.pagos_efectivo_ves / 100).toFixed(2), 'Bs']);
       ws.addRow([]);
 
       ws.addRow(['Ventas']).font = { bold: true };
-      ws.addRow(['Factura', 'Cliente', 'Tipo', 'Monto (US$)', 'Tasa']);
+      ws.addRow(['Factura', 'Cliente', 'Tipo', 'Monto (US$)', 'Devuelto (US$)', 'Neto (US$)', 'Tasa']);
       ventasEntregadas.forEach((v) =>
-        ws.addRow([v.numero_factura, v.cliente, v.tipo, (v.monto / 100).toFixed(2), v.tasa_cambio]),
+        ws.addRow([
+          v.numero_factura,
+          v.cliente,
+          v.tipo,
+          (v.monto / 100).toFixed(2),
+          (v.devuelto / 100).toFixed(2),
+          ((v.monto - v.devuelto) / 100).toFixed(2),
+          v.tasa_cambio,
+        ]),
+      );
+      ws.addRow([]);
+
+      ws.addRow(['Devoluciones del día']).font = { bold: true };
+      ws.addRow(['Factura', 'Cliente', 'Motivo', 'Productos devueltos', 'Monto (US$)', 'Fecha']);
+      dato.devoluciones.forEach((d) =>
+        ws.addRow([
+          d.numero_factura,
+          d.cliente,
+          d.motivo ?? '',
+          d.detalle.map((p) => `${p.nombre} × ${p.cantidad}`).join('; '),
+          (d.monto / 100).toFixed(2),
+          d.fecha_devolucion,
+        ]),
       );
       ws.addRow([]);
 
@@ -127,14 +153,15 @@ export default function ReportePage() {
           <EmptyState icon={<BarChart3 className="h-8 w-8" />} message="Sin datos para esta fecha" />
         </Card>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="lg:col-span-2">
-            <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-5">
-              <Stat label="Ventas entregadas" valor={totalVentas ? formatUsdCents(totalVentas) : '—'} />
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-3">
+            <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3">
+              <Stat label="Ventas brutas" valor={totalVentas ? formatUsdCents(totalVentas) : '—'} />
+              <Stat label="Devoluciones (perdido)" valor={devolucionUsd ? `-${formatUsdCents(devolucionUsd)}` : '—'} />
+              <Stat label="Ventas netas (ganado)" valor={ventasNetas ? formatUsdCents(ventasNetas) : '—'} />
               <Stat label="Ventas Bs" valor={totalVentasBs ? formatUsdCents(totalVentasBs) : '—'} />
               <Stat label="Efectivo US$" valor={formatUsdCents(dato.pagos_efectivo_usd)} />
               <Stat label="Efectivo Bs" valor={formatUsdCents(dato.pagos_efectivo_ves)} />
-              <Stat label="Ventas" valor={String(ventasEntregadas.length)} />
             </div>
           </Card>
 
@@ -164,7 +191,7 @@ export default function ReportePage() {
             )}
           </Card>
 
-          <Card>
+          <Card className="lg:col-span-2">
             <CardHeader title="Ventas" subtitle={`${ventasEntregadas.length} facturas`} />
             {ventasEntregadas.length === 0 ? (
               <EmptyState message="Sin ventas" />
@@ -176,6 +203,8 @@ export default function ReportePage() {
                     <Th>Cliente</Th>
                     <Th>Tipo</Th>
                     <Th className="text-right">Monto</Th>
+                    <Th className="text-right">Devuelto</Th>
+                    <Th className="text-right">Neto</Th>
                     <Th className="text-right">Acciones</Th>
                   </tr>
                 </THead>
@@ -188,6 +217,10 @@ export default function ReportePage() {
                         <Badge tone={v.tipo === 'contado' ? 'green' : 'blue'}>{v.tipo}</Badge>
                       </Td>
                       <Td className="text-right">{formatUsdCents(v.monto)}</Td>
+                      <Td className={`text-right ${v.devuelto > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                        {v.devuelto > 0 ? `-${formatUsdCents(v.devuelto)}` : '—'}
+                      </Td>
+                      <Td className="text-right">{formatUsdCents(Math.max(v.monto - v.devuelto, 0))}</Td>
                       <Td className="text-right">
                         <Button
                           variant="ghost"
@@ -205,6 +238,52 @@ export default function ReportePage() {
               </Table>
             )}
           </Card>
+
+          {dato.devoluciones.length > 0 && (
+            <Card className="lg:col-span-3">
+              <CardHeader
+                title="Devoluciones del día"
+                subtitle={`Perdido: -${formatUsdCents(devolucionUsd)} · ${dato.devoluciones.length} registros`}
+              />
+              <Table>
+                <THead>
+                  <tr>
+                    <Th>Factura</Th>
+                    <Th>Cliente</Th>
+                    <Th>Motivo</Th>
+                    <Th>Productos devueltos</Th>
+                    <Th>Operador</Th>
+                    <Th className="text-right">Monto</Th>
+                  </tr>
+                </THead>
+                <tbody>
+                  {dato.devoluciones.map((d) => (
+                    <tr key={d.id} className="border-b border-gray-50 last:border-0">
+                      <Td className="font-mono text-xs">#{d.numero_factura}</Td>
+                      <Td>{d.cliente}</Td>
+                      <Td className="text-gray-600">{d.motivo ?? '—'}</Td>
+                      <Td className="text-gray-600">
+                        {d.detalle.length === 0 ? (
+                          '—'
+                        ) : (
+                          <ul className="space-y-0.5">
+                            {d.detalle.map((p) => (
+                              <li key={p.producto_id} className="flex justify-between gap-4">
+                                <span>{p.nombre} × {p.cantidad}</span>
+                                <span className="text-right">{formatUsdCents(p.subtotal)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </Td>
+                      <Td className="text-gray-600">{d.operador_nombre || '—'}</Td>
+                      <Td className="text-right font-semibold text-red-600">-{formatUsdCents(d.monto)}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </Card>
+          )}
         </div>
       )}
       <FacturaModal factura={factura} onClose={() => setFactura(null)} />

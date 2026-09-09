@@ -25,6 +25,7 @@ const facturaMock = {
   tasa_cambio: 36.85,
   detalle: [{ producto: 'Pan Canilla', cantidad: 1, precio_unitario: 500, subtotal: 500 }],
   pagos: [{ tipo_pago: 'efectivo', moneda: 'usd', monto: 500, numero_referencia: null }],
+  devoluciones: [],
 };
 
 vi.mock('../services/db', () => ({

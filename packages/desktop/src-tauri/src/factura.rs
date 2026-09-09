@@ -110,6 +110,44 @@ pub fn factura_venta(conn: &Connection, venta_id: i64) -> Result<Factura, String
         }
     }
 
+    // Devoluciones de la venta (qué se devolvió y cuánto): muestra cómo quedó
+    // la venta tras los ajustes por panes deteriorados.
+    let mut devoluciones = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT d.id, d.venta_id, v.numero_factura, e.nombre_comercial, d.monto,
+                        d.motivo, COALESCE(u.nombre, ''), d.fecha_devolucion
+                 FROM devoluciones d
+                 JOIN ventas v ON v.id = d.venta_id
+                 JOIN empresas e ON e.id = d.empresa_id
+                 LEFT JOIN usuarios u ON u.id = d.operador_id
+                 WHERE d.venta_id = ?1
+                 ORDER BY d.id",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![venta_id], |r| {
+                Ok(crate::types::ResumenDiaDevolucion {
+                    id: r.get(0)?,
+                    venta_id: r.get(1)?,
+                    numero_factura: r.get(2)?,
+                    cliente: r.get(3)?,
+                    monto: r.get(4)?,
+                    motivo: r.get(5)?,
+                    operador_nombre: r.get(6)?,
+                    fecha_devolucion: r.get(7)?,
+                    detalle: Vec::new(),
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        for dev in rows {
+            let mut dev = dev.map_err(|e| e.to_string())?;
+            dev.detalle = crate::devoluciones::detalle_devolucion(conn, dev.id)?;
+            devoluciones.push(dev);
+        }
+    }
+
     Ok(Factura {
         venta_id,
         numero_factura,
@@ -129,6 +167,7 @@ pub fn factura_venta(conn: &Connection, venta_id: i64) -> Result<Factura, String
         tasa_cambio,
         detalle,
         pagos,
+        devoluciones,
     })
 }
 
@@ -190,6 +229,60 @@ mod tests {
     fn factura_inexistente_falla() {
         let conn = conn();
         assert!(factura_venta(&conn, 999).is_err());
+    }
+
+    #[test]
+    fn factura_muestra_las_devoluciones_y_como_quedo_la_venta() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        let pid = producto(&conn, 5_00);
+        stock(&conn, pid, 20.0);
+
+        let v = crear_venta(
+            &mut conn,
+            &VentaInput {
+                empresa_id: eid,
+                tipo: "credito".into(),
+                descuento: 0,
+                detalles: vec![DetalleVentaInput {
+                    producto_id: pid,
+                    cantidad: 4.0,
+                }],
+                pagos: vec![],
+                operador_id: uid,
+            },
+        )
+        .unwrap();
+
+        // Se devuelven 2 unidades a $5 → $10.
+        crate::devoluciones::registrar_devolucion(
+            &mut conn,
+            &crate::types::DevolucionInput {
+                empresa_id: eid,
+                venta_id: v.id,
+                monto: 10_00,
+                motivo: Some("Pan duro".into()),
+                operador_id: uid,
+                detalle: Some(vec![crate::types::DetalleDevolucionInput {
+                    producto_id: pid,
+                    cantidad: 2.0,
+                    precio_unitario: 5_00,
+                }]),
+            },
+        )
+        .unwrap();
+
+        let f = factura_venta(&conn, v.id).unwrap();
+        assert_eq!(f.total, 20_00);
+        assert_eq!(f.devoluciones.len(), 1);
+        assert_eq!(f.devoluciones[0].monto, 10_00);
+        assert_eq!(f.devoluciones[0].motivo.as_deref(), Some("Pan duro"));
+        assert_eq!(f.devoluciones[0].detalle.len(), 1);
+        assert_eq!(f.devoluciones[0].detalle[0].nombre, "Pan 500");
+        assert_eq!(f.devoluciones[0].detalle[0].cantidad, 2.0);
     }
 
     fn set_config_negocio(conn: &Connection) {

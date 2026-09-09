@@ -13,7 +13,9 @@ use std::sync::Mutex;
 /// v4: limpieza — se elimina la columna `precio_mayoreo` (no utilizada).
 /// v5: devoluciones — panes deteriorados/extraviados devueltos por el cliente
 ///     (ajuste que resta del total facturado; no toca stock ni caja).
-pub const SCHEMA_VERSION: i64 = 5;
+/// v6: detalle de devoluciones — qué producto/cantidad/subtotal se devolvió
+///     en cada ajuste (la factura y el reporte muestran cómo quedó el saldo).
+pub const SCHEMA_VERSION: i64 = 6;
 
 pub struct Db(pub Mutex<Connection>);
 
@@ -163,6 +165,20 @@ CREATE TABLE IF NOT EXISTS devoluciones (
     FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE SET NULL
 );
 
+-- Qué productos y cantidades se devolvieron en cada ajuste.
+-- subtotal = redondeo(cantidad * precio_unitario); la suma debe igualar
+-- al monto de la devolución.
+CREATE TABLE IF NOT EXISTS detalle_devoluciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    devolucion_id INTEGER NOT NULL,
+    producto_id INTEGER NOT NULL,
+    cantidad REAL NOT NULL,
+    precio_unitario INTEGER NOT NULL,   -- centavos US$
+    subtotal INTEGER NOT NULL,          -- centavos US$
+    FOREIGN KEY (devolucion_id) REFERENCES devoluciones(id) ON DELETE CASCADE,
+    FOREIGN KEY (producto_id) REFERENCES productos(id)
+);
+
 -- ============================ OPERACIÓN ============================
 CREATE TABLE IF NOT EXISTS usuarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -215,6 +231,7 @@ CREATE INDEX IF NOT EXISTS idx_pagos_empresa ON pagos(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_venta ON pagos(venta_id);
 CREATE INDEX IF NOT EXISTS idx_devoluciones_empresa ON devoluciones(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_devoluciones_venta ON devoluciones(venta_id);
+CREATE INDEX IF NOT EXISTS idx_detalle_devolucion ON detalle_devoluciones(devolucion_id);
 CREATE INDEX IF NOT EXISTS idx_prod_fecha ON producciones(fecha);
 CREATE INDEX IF NOT EXISTS idx_cajas_fecha ON cajas(fecha);
 "#;
@@ -293,6 +310,21 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
             fecha_devolucion DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (empresa_id) REFERENCES empresas(id),
             FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
+    // v6: qué productos/cantidades se devolvieron en cada devolución.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS detalle_devoluciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            devolucion_id INTEGER NOT NULL,
+            producto_id INTEGER NOT NULL,
+            cantidad REAL NOT NULL,
+            precio_unitario INTEGER NOT NULL,
+            subtotal INTEGER NOT NULL,
+            FOREIGN KEY (devolucion_id) REFERENCES devoluciones(id) ON DELETE CASCADE,
+            FOREIGN KEY (producto_id) REFERENCES productos(id)
         )",
         [],
     )?;
@@ -481,6 +513,18 @@ mod tests {
             )
             .expect("buscar tabla devoluciones");
         assert_eq!(tabla, 1, "se debe crear la tabla devoluciones");
+
+        let detalle: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='detalle_devoluciones'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("buscar tabla detalle_devoluciones");
+        assert_eq!(
+            detalle, 1,
+            "se debe crear la tabla detalle_devoluciones (v6)"
+        );
 
         let base: i64 = conn
             .query_row(

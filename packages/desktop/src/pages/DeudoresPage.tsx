@@ -155,12 +155,18 @@ export default function DeudoresPage() {
     setDevGuardando(true);
     setDevError(null);
     try {
+      const detalle = devLineas.flatMap((l) => {
+        const n = Number(l.devuelve.replace(',', '.'));
+        if (!Number.isFinite(n) || n <= 0) return [];
+        return [{ producto_id: l.detalle.producto_id, cantidad: n, precio_unitario: l.detalle.precio_unitario }];
+      });
       await registrarDevolucion({
         empresa_id: seleccion.empresa_id,
         venta_id: devVenta.venta_id,
         monto: totalDevUsd,
         motivo: devMotivo.trim() || null,
         operador_id: operadorId,
+        detalle,
       });
       setDevAbierto(false);
       await refrescar(seleccion.empresa_id);
@@ -406,16 +412,28 @@ export default function DeudoresPage() {
             </Table>
           )}
           {devoluciones.length > 0 && (
-            <div className="mt-4 border-t border-gray-100 pt-3">
+            <div className="mt-4 border-t border-gray-100 px-4 pb-4 pt-3">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Devoluciones registradas</p>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {devoluciones.map((d) => (
-                  <li key={d.id} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">
-                      Factura #{d.numero_factura}
-                      {d.motivo ? ` · ${d.motivo}` : ''}
-                    </span>
-                    <span className="font-semibold text-red-600">-{formatUsdCents(d.monto)}</span>
+                  <li key={d.id}>
+                    <div className="flex items-center justify-between gap-4 text-sm">
+                      <span className="text-gray-600">
+                        Factura #{d.numero_factura}
+                        {d.motivo ? ` · ${d.motivo}` : ''}
+                      </span>
+                      <span className="shrink-0 font-semibold text-red-600">-{formatUsdCents(d.monto)}</span>
+                    </div>
+                    {d.detalle.length > 0 && (
+                      <ul className="mt-1 space-y-1 border-l-2 border-red-100 pl-5 text-xs text-gray-500">
+                        {d.detalle.map((p) => (
+                          <li key={p.producto_id} className="flex items-center justify-between gap-4">
+                            <span>{p.nombre} × {p.cantidad}</span>
+                            <span className="shrink-0 tabular-nums">{formatUsdCents(p.subtotal)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -518,14 +536,6 @@ export default function DeudoresPage() {
                 Abonar restante
               </Button>
             </div>
-          </div>
-
-          <div className="flex justify-between rounded-lg bg-emerald-50 p-3 text-sm">
-            <span className="text-gray-600">A abonar ahora</span>
-            <span className="text-right">
-              <strong className="block">{formatUsdCents(pagadoUsd)}</strong>
-              <span className="block text-xs text-gray-500">{formatVesCents(Math.round(pagadoUsd * tasa))}</span>
-            </span>
           </div>
 
           {superaSaldo && (

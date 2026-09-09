@@ -73,42 +73,96 @@ export default function CerrarCajaPage() {
               <h3 className="mb-2 text-sm font-semibold text-gray-700">Cuenta del día</h3>
               {!resumen ? (
                 <p className="text-sm text-gray-500">Cargando ventas del día…</p>
-              ) : resumen.ventas.length === 0 ? (
+              ) : resumen.ventas.length === 0 && resumen.devoluciones.length === 0 ? (
                 <p className="text-sm text-gray-500">No hay ventas registradas hoy.</p>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs uppercase text-gray-500">
-                      <th className="py-1 text-left">Factura</th>
-                      <th className="py-1 text-left">Cliente</th>
-                      <th className="py-1 text-center">Tipo</th>
-                      <th className="py-1 text-right">US$</th>
-                      <th className="py-1 text-right">Bs</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {resumen.ventas.map((v) => (
-                      <tr key={v.venta_id} className="border-b border-gray-100">
-                        <td className="py-1 font-mono text-xs">#{String(v.numero_factura).padStart(4, '0')}</td>
-                        <td className="py-1">{v.cliente}</td>
-                        <td className="py-1 text-center text-xs">{v.tipo === 'contado' ? 'Contado' : 'Crédito'}</td>
-                        <td className="py-1 text-right">{formatUsdCents(v.monto)}</td>
-                        <td className="py-1 text-right">{formatVesCents(toVes(v.monto, 'usd', v.tasa_cambio))}</td>
+                <>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs uppercase text-gray-500">
+                        <th className="py-1 text-left">Factura</th>
+                        <th className="py-1 text-left">Cliente</th>
+                        <th className="py-1 text-center">Tipo</th>
+                        <th className="py-1 text-right">US$</th>
+                        <th className="py-1 text-right">Bs</th>
+                        <th className="py-1 text-right">Devuelto</th>
+                        <th className="py-1 text-right">Neto</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="font-bold">
-                      <td className="pt-2" colSpan={3}>
-                        Total ventas del día
-                      </td>
-                      <td className="pt-2 text-right">{formatUsdCents(resumen.ventas.reduce((s, v) => s + v.monto, 0))}</td>
-                      <td className="pt-2 text-right">
-                        {formatVesCents(resumen.ventas.reduce((s, v) => s + toVes(v.monto, 'usd', v.tasa_cambio), 0))}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody>
+                      {resumen.ventas.map((v) => (
+                        <tr key={v.venta_id} className="border-b border-gray-100">
+                          <td className="py-1 font-mono text-xs">#{String(v.numero_factura).padStart(4, '0')}</td>
+                          <td className="py-1">{v.cliente}</td>
+                          <td className="py-1 text-center text-xs">{v.tipo === 'contado' ? 'Contado' : 'Crédito'}</td>
+                          <td className="py-1 text-right">{formatUsdCents(v.monto)}</td>
+                          <td className="py-1 text-right">{formatVesCents(toVes(v.monto, 'usd', v.tasa_cambio))}</td>
+                          <td className={`py-1 text-right ${v.devuelto > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                            {v.devuelto > 0 ? `-${formatUsdCents(v.devuelto)}` : '—'}
+                          </td>
+                          <td className="py-1 text-right">{formatUsdCents(Math.max(v.monto - v.devuelto, 0))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="font-bold">
+                        <td className="pt-2" colSpan={3}>
+                          Total ventas
+                        </td>
+                        <td className="pt-2 text-right">{formatUsdCents(resumen.ventas.reduce((s, v) => s + v.monto, 0))}</td>
+                        <td className="pt-2 text-right">
+                          {formatVesCents(resumen.ventas.reduce((s, v) => s + toVes(v.monto, 'usd', v.tasa_cambio), 0))}
+                        </td>
+                        <td className="pt-2 text-right text-red-600">
+                          -{formatUsdCents(resumen.devoluciones.reduce((s, d) => s + d.monto, 0))}
+                        </td>
+                        <td className="pt-2 text-right">
+                          {formatUsdCents(
+                            Math.max(
+                              resumen.ventas.reduce((s, v) => s + v.monto, 0) -
+                                resumen.devoluciones.reduce((s, d) => s + d.monto, 0),
+                              0,
+                            ),
+                          )}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+
+                  {resumen.devoluciones.length > 0 && (
+                    <div className="mt-3 border-t border-gray-100 pt-2">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Devoluciones del día (perdido)
+                      </p>
+                      <ul className="space-y-1">
+                        {resumen.devoluciones.map((d) => (
+                          <li key={d.id}>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">
+                                Factura #{String(d.numero_factura).padStart(4, '0')} · {d.cliente}
+                                {d.motivo ? ` · ${d.motivo}` : ''}
+                              </span>
+                              <span className="font-semibold text-red-600">-{formatUsdCents(d.monto)}</span>
+                            </div>
+                            {d.detalle.length > 0 && (
+                              <ul className="mt-0.5 space-y-0.5 border-l border-red-100 pl-3 text-xs text-gray-500">
+                                {d.detalle.map((p) => (
+                                  <li key={p.producto_id} className="flex justify-between gap-4">
+                                    <span>{p.nombre} × {p.cantidad}</span>
+                                    <span>{formatUsdCents(p.subtotal)}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-2 text-xs text-gray-500">
+                        Las devoluciones no alteran el arqueo de efectivo (no hay reembolso).
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 

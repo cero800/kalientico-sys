@@ -1,7 +1,7 @@
 // M9 - Configuración (clave-valor) y reporte/día.
 
 use crate::pagos::estado_cuenta_todos;
-use crate::types::{MovimientoResumen, ResumenDia, ResumenDiaVenta};
+use crate::types::{MovimientoResumen, ResumenDia, ResumenDiaDevolucion, ResumenDiaVenta};
 use rusqlite::{params, Connection, OptionalExtension};
 
 // ------------------------------------------------------------
@@ -98,10 +98,14 @@ pub fn resumen_dia(conn: &Connection, fecha_opt: Option<&str>) -> Result<Resumen
             .map_err(|e| e.to_string())?
     };
 
-    // Ventas entregadas del día
+    // Ventas entregadas del día. `devuelto` = lo devuelto de esa factura el
+    // MISMO día (fecha_devolucion = fecha de la venta), para que cuadre con la
+    // lista de devoluciones del día y el neto (ventas − devoluciones).
     let (cond_ventas, fecha_ventas) = filtro_fecha("v.fecha", fecha_opt);
     let sql_ventas = format!(
-        "SELECT v.id, v.numero_factura, e.nombre_comercial, v.tipo, v.total, v.estado, v.tasa_cambio
+        "SELECT v.id, v.numero_factura, e.nombre_comercial, v.tipo, v.total, v.estado, v.tasa_cambio,
+                (SELECT COALESCE(SUM(d.monto), 0) FROM devoluciones d
+                 WHERE d.venta_id = v.id AND date(d.fecha_devolucion) = date(v.fecha))
          FROM ventas v JOIN empresas e ON e.id = v.empresa_id
          WHERE {cond_ventas} AND v.estado = 'entregada'
          ORDER BY v.id"
@@ -118,6 +122,7 @@ pub fn resumen_dia(conn: &Connection, fecha_opt: Option<&str>) -> Result<Resumen
                     monto: r.get(4)?,
                     estado: r.get(5)?,
                     tasa_cambio: r.get(6)?,
+                    devuelto: r.get(7)?,
                 })
             })
             .map_err(|e| e.to_string())?
@@ -135,12 +140,70 @@ pub fn resumen_dia(conn: &Connection, fecha_opt: Option<&str>) -> Result<Resumen
                     monto: r.get(4)?,
                     estado: r.get(5)?,
                     tasa_cambio: r.get(6)?,
+                    devuelto: r.get(7)?,
                 })
             })
             .map_err(|e| e.to_string())?
             .collect::<rusqlite::Result<Vec<ResumenDiaVenta>>>()
             .map_err(|e| e.to_string())?
     };
+
+    // Devoluciones registradas durante el día (incluye las de facturas de días
+    // anteriores): son el "perdido" de la cuenta del día.
+    let (cond_dev, fecha_dev) = filtro_fecha("d.fecha_devolucion", fecha_opt);
+    let sql_devoluciones = format!(
+        "SELECT d.id, d.venta_id, v.numero_factura, e.nombre_comercial, d.monto, d.motivo,
+                COALESCE(u.nombre, ''), d.fecha_devolucion
+         FROM devoluciones d
+         JOIN ventas v ON v.id = d.venta_id
+         JOIN empresas e ON e.id = d.empresa_id
+         LEFT JOIN usuarios u ON u.id = d.operador_id
+         WHERE {cond_dev}
+         ORDER BY d.id"
+    );
+    let mut devoluciones = if fecha_dev.is_empty() {
+        conn.prepare(&sql_devoluciones)
+            .map_err(|e| e.to_string())?
+            .query_map([], |r| {
+                Ok(ResumenDiaDevolucion {
+                    id: r.get(0)?,
+                    venta_id: r.get(1)?,
+                    numero_factura: r.get(2)?,
+                    cliente: r.get(3)?,
+                    monto: r.get(4)?,
+                    motivo: r.get(5)?,
+                    operador_nombre: r.get(6)?,
+                    fecha_devolucion: r.get(7)?,
+                    detalle: Vec::new(),
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<rusqlite::Result<Vec<ResumenDiaDevolucion>>>()
+            .map_err(|e| e.to_string())?
+    } else {
+        conn.prepare(&sql_devoluciones)
+            .map_err(|e| e.to_string())?
+            .query_map(params![fecha_dev.clone()], |r| {
+                Ok(ResumenDiaDevolucion {
+                    id: r.get(0)?,
+                    venta_id: r.get(1)?,
+                    numero_factura: r.get(2)?,
+                    cliente: r.get(3)?,
+                    monto: r.get(4)?,
+                    motivo: r.get(5)?,
+                    operador_nombre: r.get(6)?,
+                    fecha_devolucion: r.get(7)?,
+                    detalle: Vec::new(),
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<rusqlite::Result<Vec<ResumenDiaDevolucion>>>()
+            .map_err(|e| e.to_string())?
+    };
+    // Hidrata los productos devueltos de cada devolución del día.
+    for dev in &mut devoluciones {
+        dev.detalle = crate::devoluciones::detalle_devolucion(conn, dev.id)?;
+    }
 
     // Pagos en efectivo del día, separados por moneda
     let (cond_pagos, fecha_pagos) = filtro_fecha("fecha_pago", fecha_opt);
@@ -172,6 +235,7 @@ pub fn resumen_dia(conn: &Connection, fecha_opt: Option<&str>) -> Result<Resumen
         ventas,
         pagos_efectivo_usd,
         pagos_efectivo_ves,
+        devoluciones,
         deudores,
     })
 }
@@ -254,5 +318,60 @@ mod tests {
         assert_eq!(r.pagos_efectivo_ves, 36_850);
         assert_eq!(r.ventas.len(), 2);
         assert!(r.ventas.iter().all(|v| v.tasa_cambio == 36.85));
+    }
+
+    #[test]
+    fn resumen_dia_incluye_devoluciones_del_dia_y_devuelto_por_factura() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        let pid = producto(&conn, 10_00);
+        stock(&conn, pid, 20.0);
+
+        let venta = VentaInput {
+            empresa_id: eid,
+            tipo: "credito".into(),
+            descuento: 0,
+            detalles: vec![DetalleVentaInput {
+                producto_id: pid,
+                cantidad: 10.0,
+            }],
+            pagos: vec![],
+            operador_id: uid,
+        };
+        let vid = crate::ventas::crear_venta(&mut conn, &venta).unwrap().id;
+        crate::devoluciones::registrar_devolucion(
+            &mut conn,
+            &crate::types::DevolucionInput {
+                empresa_id: eid,
+                venta_id: vid,
+                monto: 2_50,
+                motivo: Some("Pan agrio".into()),
+                operador_id: uid,
+                detalle: Some(vec![crate::types::DetalleDevolucionInput {
+                    producto_id: pid,
+                    cantidad: 1.0,
+                    precio_unitario: 2_50,
+                }]),
+            },
+        )
+        .unwrap();
+
+        let r = resumen_dia(&conn, None).unwrap();
+        assert_eq!(r.ventas.len(), 1);
+        assert_eq!(r.ventas[0].devuelto, 2_50);
+        assert_eq!(r.devoluciones.len(), 1);
+        assert_eq!(r.devoluciones[0].venta_id, vid);
+        assert_eq!(r.devoluciones[0].numero_factura, r.ventas[0].numero_factura);
+        assert_eq!(r.devoluciones[0].monto, 2_50);
+        assert_eq!(r.devoluciones[0].cliente, "Pan S.A.");
+        assert_eq!(r.devoluciones[0].motivo.as_deref(), Some("Pan agrio"));
+        // El detalle del día incluye qué producto se devolvió.
+        assert_eq!(r.devoluciones[0].detalle.len(), 1);
+        assert_eq!(r.devoluciones[0].detalle[0].nombre, "Pan 1000");
+        assert_eq!(r.devoluciones[0].detalle[0].cantidad, 1.0);
+        assert_eq!(r.devoluciones[0].detalle[0].subtotal, 2_50);
     }
 }

@@ -38,8 +38,10 @@ export function CierreModal({ cierre, onClose }: Props) {
     }
   };
 
-  const totalDiaUsd = cierre.total_ventas_usd + cierre.total_abonos_usd;
-  const totalDiaBs = cierre.total_ventas_bs + cierre.total_abonos_bs;
+  const totalDiaUsd = cierre.total_ventas_usd - cierre.total_devoluciones_usd + cierre.total_abonos_usd;
+  const totalDiaBs = cierre.total_ventas_bs - cierre.total_devoluciones_bs + cierre.total_abonos_bs;
+  const ventasNetasUsd = cierre.total_ventas_usd - cierre.total_devoluciones_usd;
+  const ventasNetasBs = cierre.total_ventas_bs - cierre.total_devoluciones_bs;
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -98,6 +100,7 @@ export function CierreModal({ cierre, onClose }: Props) {
                     <th className="py-1 text-center">Tipo</th>
                     <th className="py-1 text-right">US$</th>
                     <th className="py-1 text-right">Bs</th>
+                    <th className="py-1 text-right">Dev.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -108,6 +111,9 @@ export function CierreModal({ cierre, onClose }: Props) {
                       <td className="py-1 text-center">{v.tipo === 'contado' ? 'Contado' : 'Crédito'}</td>
                       <td className="py-1 text-right">{formatUsdCents(v.monto)}</td>
                       <td className="py-1 text-right">{formatVesCents(toVes(v.monto, 'usd', v.tasa_cambio))}</td>
+                      <td className={`py-1 text-right ${v.devuelto > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                        {v.devuelto > 0 ? formatUsdCents(v.devuelto) : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -116,10 +122,44 @@ export function CierreModal({ cierre, onClose }: Props) {
                     <td className="pt-1" colSpan={3}>Total ventas</td>
                     <td className="pt-1 text-right">{formatUsdCents(cierre.total_ventas_usd)}</td>
                     <td className="pt-1 text-right">{formatVesCents(cierre.total_ventas_bs)}</td>
+                    <td className="pt-1 text-right text-red-600">{formatUsdCents(cierre.total_devoluciones_usd)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
+
+            {cierre.devoluciones.length > 0 && (
+              <div className="border-t border-dashed border-gray-400 py-2">
+                <p className="mb-1 text-[11px] uppercase text-gray-500">Devoluciones del día (perdido)</p>
+                <ul className="space-y-0.5 text-xs">
+                  {cierre.devoluciones.map((d) => (
+                    <li key={d.id}>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">
+                          Factura #{d.numero_factura} · {d.cliente}
+                          {d.motivo ? ` · ${d.motivo}` : ''}
+                        </span>
+                        <span className="font-semibold text-red-600">-{formatUsdCents(d.monto)}</span>
+                      </div>
+                      {d.detalle.length > 0 && (
+                        <ul className="mt-0.5 space-y-0.5 border-l border-red-100 pl-3 text-[11px] text-gray-500">
+                          {d.detalle.map((p) => (
+                            <li key={p.producto_id} className="flex justify-between">
+                              <span>{p.nombre} × {p.cantidad}</span>
+                              <span>{formatUsdCents(p.subtotal)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1 flex justify-between text-xs font-bold">
+                  <span>Ventas netas (ganado)</span>
+                  <span>{formatUsdCents(ventasNetasUsd)} / {formatVesCents(ventasNetasBs)}</span>
+                </p>
+              </div>
+            )}
 
             <div className="border-t border-dashed border-gray-400 py-2">
               <p className="mb-1 text-[11px] uppercase text-gray-500">Abonos del día</p>

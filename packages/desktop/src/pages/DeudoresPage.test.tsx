@@ -201,6 +201,7 @@ describe('DeudoresPage', () => {
       monto: 500,
       motivo: null,
       operador_id: 1,
+      detalle: [{ producto_id: 1, cantidad: 5, precio_unitario: 100 }],
     });
   });
 
@@ -228,12 +229,14 @@ describe('DeudoresPage', () => {
       { venta_id: 10, numero_factura: 3, tipo: 'credito', fecha: '2026-09-04', total: 5000, devuelto: 1000 },
     ] as never);
     vi.mocked(listarDevoluciones).mockResolvedValue([
-      { id: 1, empresa_id: 2, venta_id: 10, numero_factura: 3, monto: 1000, motivo: 'pan deteriorado', operador_id: 1, fecha_devolucion: '2026-09-05' },
+      { id: 1, empresa_id: 2, venta_id: 10, numero_factura: 3, monto: 1000, motivo: 'pan deteriorado', operador_id: 1, fecha_devolucion: '2026-09-05', detalle: [{ producto_id: 1, nombre: 'Pan Canilla', cantidad: 5, precio_unitario: 100, subtotal: 500 }] },
     ] as never);
     const user = userEvent.setup();
     render(<DeudoresPage />);
     await user.click(await screen.findByText('Café del Centro'));
     expect(await screen.findByText(/pan deteriorado/)).toBeInTheDocument();
     expect(screen.getAllByText('-$10.00').length).toBeGreaterThan(0);
+    // Muestra qué productos se devolvieron dentro de la factura.
+    expect(screen.getByText(/Pan Canilla × 5/)).toBeInTheDocument();
   });
 });

@@ -175,17 +175,39 @@ pub struct PagoLinea {
 // Ajuste por panes deteriorados/extraviados devueltos por el cliente. Resta del
 // total facturado de la empresa (baja el saldo si hay deuda); no toca stock ni caja.
 
+/// Línea de detalle que el usuario elige devolver (solo los productos con
+/// cantidad > 0 van en el detalle enviado).
+#[derive(Deserialize, Clone)]
+pub struct DetalleDevolucionInput {
+    pub producto_id: i64,
+    pub cantidad: f64,
+    pub precio_unitario: i64, // centavos US$ (lo que se facturo en la venta)
+}
+
 /// Input para registrar una devolución vinculada a una factura concreta.
-#[derive(Deserialize)]
+/// `detalle` (opcional por compatibilidad) identifica qué productos/cantidades
+/// se devolvieron; si viene, la suma de subtotales debe igualar `monto`.
+#[derive(Deserialize, Clone)]
 pub struct DevolucionInput {
     pub empresa_id: i64,
     pub venta_id: i64,
     pub monto: i64, // centavos US$
     pub motivo: Option<String>,
     pub operador_id: i64,
+    pub detalle: Option<Vec<DetalleDevolucionInput>>,
 }
 
-/// Devolución registrada (para el historial).
+/// Producto devuelto dentro de una devolución.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct DetalleDevolucion {
+    pub producto_id: i64,
+    pub nombre: String,
+    pub cantidad: f64,
+    pub precio_unitario: i64,
+    pub subtotal: i64,
+}
+
+/// Devolución registrada (para el historial, junto con sus productos).
 #[derive(Serialize, Debug)]
 pub struct Devolucion {
     pub id: i64,
@@ -196,6 +218,7 @@ pub struct Devolucion {
     pub motivo: Option<String>,
     pub operador_id: i64,
     pub fecha_devolucion: Option<String>,
+    pub detalle: Vec<DetalleDevolucion>,
 }
 
 /// Una factura entregada con lo ya devuelto, para saber cuánto queda por devolver.
@@ -300,8 +323,24 @@ pub struct ResumenDiaVenta {
     pub cliente: String,
     pub tipo: String,
     pub monto: i64,
+    pub devuelto: i64,
     pub estado: String,
     pub tasa_cambio: f64,
+}
+
+/// Devolución registrada durante el día (panes deteriorados/extraviados),
+/// con el detalle de los productos devueltos.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct ResumenDiaDevolucion {
+    pub id: i64,
+    pub venta_id: i64,
+    pub numero_factura: i64,
+    pub cliente: String,
+    pub monto: i64,
+    pub motivo: Option<String>,
+    pub operador_nombre: String,
+    pub fecha_devolucion: String,
+    pub detalle: Vec<DetalleDevolucion>,
 }
 
 #[derive(Serialize)]
@@ -310,6 +349,7 @@ pub struct ResumenDia {
     pub ventas: Vec<ResumenDiaVenta>,
     pub pagos_efectivo_usd: i64,
     pub pagos_efectivo_ves: i64,
+    pub devoluciones: Vec<ResumenDiaDevolucion>,
     pub deudores: Vec<EstadoCuenta>,
 }
 
@@ -339,7 +379,8 @@ pub struct FacturaPago {
 }
 
 /// Factura completa de una venta: cabecera + cliente + detalle + pagos +
-/// datos del negocio emisor (desde `config`) para el comprobante imprimible.
+/// devoluciones registradas (qué se devolvió y cuánto — "cómo quedó la venta")
+/// + datos del negocio emisor (desde `config`) para el comprobante imprimible.
 #[derive(Serialize)]
 pub struct Factura {
     pub venta_id: i64,
@@ -360,6 +401,7 @@ pub struct Factura {
     pub tasa_cambio: f64,
     pub detalle: Vec<FacturaDetalle>,
     pub pagos: Vec<FacturaPago>,
+    pub devoluciones: Vec<ResumenDiaDevolucion>,
 }
 
 // ---- Cierre de caja (comprobante del día) ----
@@ -397,9 +439,12 @@ pub struct CierreDia {
     pub efectivo_esperado_ves: i64,
     pub ventas: Vec<ResumenDiaVenta>,
     pub abonos: Vec<CierreAbono>,
+    pub devoluciones: Vec<ResumenDiaDevolucion>,
     pub total_ventas_usd: i64,
     pub total_ventas_bs: i64,
     pub total_abonos_usd: i64,
     pub total_abonos_bs: i64,
+    pub total_devoluciones_usd: i64,
+    pub total_devoluciones_bs: i64,
     pub tasa_cierre: f64,
 }

@@ -141,6 +141,12 @@ pub fn cerrar_caja(conn: &Connection, i: &CajaCerrarInput) -> Result<CierreDia, 
         .map(|v| (v.monto as f64 * v.tasa_cambio).round() as i64)
         .sum();
 
+    // Devoluciones del día (informativo): no alteran el arqueo, solo la cuenta
+    // de ventas netas (lo perdido vs lo ganado).
+    let devoluciones = resumen.devoluciones;
+    let total_devoluciones_usd: i64 = devoluciones.iter().map(|d| d.monto).sum();
+    let total_devoluciones_bs: i64 = (total_devoluciones_usd as f64 * i.tasa_cierre).round() as i64;
+
     // Abonos a cuenta del día (todas las monedas y formas de pago).
     let mut abonos = Vec::new();
     {
@@ -246,10 +252,13 @@ pub fn cerrar_caja(conn: &Connection, i: &CajaCerrarInput) -> Result<CierreDia, 
         efectivo_esperado_ves: esperado_ves,
         ventas,
         abonos,
+        devoluciones,
         total_ventas_usd,
         total_ventas_bs,
         total_abonos_usd,
         total_abonos_bs,
+        total_devoluciones_usd,
+        total_devoluciones_bs,
         tasa_cierre,
     })
 }
@@ -405,6 +414,63 @@ mod tests {
         assert_eq!(cierre.abonos.len(), 0);
         assert_eq!(cierre.total_abonos_usd, 0);
         assert_eq!(cierre.tasa_cierre, 37.5);
+    }
+
+    #[test]
+    fn cierre_incluye_devoluciones_pero_no_altera_el_arqueo() {
+        let mut conn = conn();
+        tasa(&conn, 36.85);
+        let uid = usuario(&conn);
+        abrir(&conn, uid);
+        let eid = empresa(&conn);
+        let pid = producto(&conn, 10_00);
+        stock(&conn, pid, 20.0);
+
+        // $10 contado en efectivo US$ y luego se devuelven $4 por panes malos.
+        let vid = crate::ventas::crear_venta(&mut conn, &venta_usd(eid, pid, uid))
+            .unwrap()
+            .id;
+        crate::devoluciones::registrar_devolucion(
+            &mut conn,
+            &crate::types::DevolucionInput {
+                empresa_id: eid,
+                venta_id: vid,
+                monto: 4_00,
+                motivo: Some("Pan deteriorado".into()),
+                operador_id: uid,
+                detalle: None,
+            },
+        )
+        .unwrap();
+
+        let caja_id = caja_abierta(&conn).unwrap().unwrap().id;
+        let cierre = cerrar_caja(
+            &conn,
+            &CajaCerrarInput {
+                caja_id,
+                operador_id: uid,
+                tasa_cierre: 37.5,
+            },
+        )
+        .unwrap();
+
+        // SIN reembolso en efectivo: el arqueo queda intacto.
+        assert_eq!(cierre.efectivo_ventas_usd, 10_00);
+        assert_eq!(cierre.efectivo_esperado_usd, 10_00);
+
+        // Informado: la factura arrastra lo devuelto y el cierre lista el "perdido".
+        assert_eq!(cierre.ventas[0].devuelto, 4_00);
+        assert_eq!(cierre.devoluciones.len(), 1);
+        assert_eq!(
+            cierre.devoluciones[0].numero_factura,
+            cierre.ventas[0].numero_factura
+        );
+        assert_eq!(
+            cierre.devoluciones[0].motivo.as_deref(),
+            Some("Pan deteriorado")
+        );
+        assert_eq!(cierre.total_devoluciones_usd, 4_00);
+        assert_eq!(cierre.total_devoluciones_bs, 15_000); // $4 * 37.5
     }
 
     #[test]

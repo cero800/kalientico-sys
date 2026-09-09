@@ -184,12 +184,27 @@ export interface PagoLinea {
 // Devoluciones (panes deteriorados/extraviados)
 //---------------------------------------------------------------------------
 
+export interface DetalleDevolucionInput {
+  producto_id: number;
+  cantidad: number;
+  precio_unitario: number;
+}
+
 export interface DevolucionInput {
   empresa_id: number;
   venta_id: number;
   monto: number;
   motivo: string | null;
   operador_id: number;
+  detalle?: DetalleDevolucionInput[];
+}
+
+export interface DetalleDevolucion {
+  producto_id: number;
+  nombre: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
 }
 
 export interface Devolucion {
@@ -201,6 +216,7 @@ export interface Devolucion {
   motivo: string | null;
   operador_id: number;
   fecha_devolucion: string | null;
+  detalle: DetalleDevolucion[];
 }
 
 export interface VentaDevolucion {
@@ -288,6 +304,7 @@ export interface ResumenDiaVenta {
   cliente: string;
   tipo: TipoVenta;
   monto: number;
+  devuelto: number;
   estado: EstadoVenta;
   tasa_cambio: number;
 }
@@ -298,11 +315,24 @@ export interface MovimientoResumen {
   costo_unitario: number;
 }
 
+export interface ResumenDiaDevolucion {
+  id: number;
+  venta_id: number;
+  numero_factura: number;
+  cliente: string;
+  monto: number;
+  motivo: string | null;
+  operador_nombre: string;
+  fecha_devolucion: string;
+  detalle: DetalleDevolucion[];
+}
+
 export interface ResumenDia {
   producciones: MovimientoResumen[];
   ventas: ResumenDiaVenta[];
   pagos_efectivo_usd: number;
   pagos_efectivo_ves: number;
+  devoluciones: ResumenDiaDevolucion[];
   deudores: EstadoCuenta[];
 }
 
@@ -343,6 +373,7 @@ export interface Factura {
   tasa_cambio: number;
   detalle: FacturaDetalle[];
   pagos: FacturaPago[];
+  devoluciones: ResumenDiaDevolucion[];
 }
 
 //---------------------------------------------------------------------------
@@ -377,9 +408,12 @@ export interface CierreDia {
   efectivo_esperado_ves: number;
   ventas: ResumenDiaVenta[];
   abonos: CierreAbono[];
+  devoluciones: ResumenDiaDevolucion[];
   total_ventas_usd: number;
   total_ventas_bs: number;
   total_abonos_usd: number;
   total_abonos_bs: number;
+  total_devoluciones_usd: number;
+  total_devoluciones_bs: number;
   tasa_cierre: number;
 }

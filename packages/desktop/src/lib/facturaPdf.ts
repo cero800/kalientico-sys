@@ -132,6 +132,39 @@ export async function facturaPdfB64(f: Factura): Promise<string> {
     y += 5;
   });
 
+  // Devoluciones: qué se devolvió y cómo quedó el saldo neto de la venta.
+  if (f.devoluciones.length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setLineWidth(0.3);
+    doc.line(MARGEN, y, w - MARGEN, y);
+    y += 4;
+    doc.text('DEVOLUCIONES (PANES DETERIORADOS)', MARGEN, y);
+    y += 4;
+    doc.setFont('helvetica', 'normal');
+    f.devoluciones.forEach((dev) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      const motivo = dev.motivo ? ` · ${dev.motivo}` : '';
+      doc.text(`Devuelto el ${dev.fecha_devolucion.slice(0, 10)}${motivo}`, MARGEN, y);
+      doc.text(`-${formatUsdCents(dev.monto)}`, colSub, y, { align: 'right' });
+      y += 4;
+      doc.setFontSize(7);
+      dev.detalle.forEach((p) => {
+        const linea = `${p.nombre} x ${p.cantidad}`;
+        doc.text(linea.length > 46 ? `${linea.slice(0, 45)}…` : linea, MARGEN + 3, y);
+        doc.text(formatUsdCents(p.subtotal), colSub, y, { align: 'right' });
+        y += 4;
+      });
+    });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    const neto =
+      f.total - f.devoluciones.reduce((s, d) => s + d.monto, 0);
+    doc.text('Saldo final de la venta (neto)', MARGEN, y);
+    doc.text(formatUsdCents(Math.max(neto, 0)), colSub, y, { align: 'right' });
+    y += 5;
+  }
+
   // Tasa
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');

@@ -188,6 +188,46 @@ export function FacturaModal({ factura, onClose }: Props) {
               </ul>
             </div>
 
+            {factura.devoluciones.length > 0 && (
+              <div className="border-t border-dashed border-gray-400 py-2">
+                <p className="mb-1 text-[11px] uppercase text-gray-500">
+                  Devoluciones (panes deteriorados)
+                </p>
+                {factura.devoluciones.map((dev) => (
+                  <div key={dev.id} className="mb-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">
+                        Devuelto el {dev.fecha_devolucion.slice(0, 10)}
+                        {dev.motivo ? ` · ${dev.motivo}` : ''}
+                      </span>
+                      <span className="font-semibold text-red-600">-{formatUsdCents(dev.monto)}</span>
+                    </div>
+                    {dev.detalle.length > 0 && (
+                      <ul className="ml-3 mt-0.5 space-y-0.5 border-l border-red-100 pl-3 text-[11px] text-gray-500">
+                        {dev.detalle.map((p) => (
+                          <li key={p.producto_id} className="flex justify-between gap-4">
+                            <span>{p.nombre} × {p.cantidad}</span>
+                            <span>{formatUsdCents(p.subtotal)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+                <div className="mt-1 flex justify-between text-xs font-bold">
+                  <span>Saldo final de la venta (neto)</span>
+                  <span>
+                    {formatUsdCents(
+                      Math.max(
+                        factura.total - factura.devoluciones.reduce((s, d) => s + d.monto, 0),
+                        0,
+                      ),
+                    )}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <p className="pb-1 text-center text-[11px] tracking-wide">
               {factura.tasa_cambio > 0
                 ? `Tasa: Bs ${factura.tasa_cambio.toFixed(2)} por US$ 1`
