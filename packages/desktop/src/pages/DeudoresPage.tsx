@@ -32,6 +32,7 @@ import { Table, THead, Th, Td } from '../components/ui/Table';
 import { Badge } from '../components/ui/Badge';
 import { EmptyState, PageHeader } from '../components/ui/Page';
 import { PageLoader } from '../components/ui/Spinner';
+import { DatePicker } from '../components/ui/DatePicker';
 
 interface PagoForm {
   id: number;
@@ -86,6 +87,10 @@ export default function DeudoresPage() {
   const [devMotivo, setDevMotivo] = useState('');
   const [devError, setDevError] = useState<string | null>(null);
   const [devGuardando, setDevGuardando] = useState(false);
+  const [filtroDia, setFiltroDia] = useState('');
+
+  const devolucionesVisibles =
+    filtroDia === '' ? devoluciones : devoluciones.filter((d) => (d.fecha_devolucion ?? '').slice(0, 10) === filtroDia);
 
   const cargar = () => estadoCuentaTodos().then(setDeudores).finally(() => setCargando(false));
   useEffect(() => {
@@ -379,6 +384,7 @@ export default function DeudoresPage() {
                 <tr>
                   <Th>Factura</Th>
                   <Th>Tipo</Th>
+                  <Th>Entrega</Th>
                   <Th className="text-right">Total</Th>
                   <Th className="text-right">Devuelto</Th>
                   <Th className="text-right"></Th>
@@ -391,6 +397,7 @@ export default function DeudoresPage() {
                     <Td>
                       <Badge tone={v.tipo === 'credito' ? 'amber' : 'blue'}>{v.tipo === 'credito' ? 'Crédito' : 'Contado'}</Badge>
                     </Td>
+                    <Td className="text-xs text-gray-500">{v.fecha?.slice(0, 10) ?? '—'}</Td>
                     <Td className="text-right">{formatUsdCents(v.total)}</Td>
                     <Td className={`text-right ${v.devuelto > 0 ? 'text-red-600' : 'text-gray-400'}`}>
                       {v.devuelto > 0 ? `-${formatUsdCents(v.devuelto)}` : '—'}
@@ -411,32 +418,52 @@ export default function DeudoresPage() {
               </tbody>
             </Table>
           )}
-          {devoluciones.length > 0 && (
+          {seleccion && (devoluciones.length > 0 || filtroDia !== '') && (
             <div className="mt-4 border-t border-gray-100 px-4 pb-4 pt-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Devoluciones registradas</p>
-              <ul className="space-y-2">
-                {devoluciones.map((d) => (
-                  <li key={d.id}>
-                    <div className="flex items-center justify-between gap-4 text-sm">
-                      <span className="text-gray-600">
-                        Factura #{d.numero_factura}
-                        {d.motivo ? ` · ${d.motivo}` : ''}
-                      </span>
-                      <span className="shrink-0 font-semibold text-red-600">-{formatUsdCents(d.monto)}</span>
-                    </div>
-                    {d.detalle.length > 0 && (
-                      <ul className="mt-1 space-y-1 border-l-2 border-red-100 pl-5 text-xs text-gray-500">
-                        {d.detalle.map((p) => (
-                          <li key={p.producto_id} className="flex items-center justify-between gap-4">
-                            <span>{p.nombre} × {p.cantidad}</span>
-                            <span className="shrink-0 tabular-nums">{formatUsdCents(p.subtotal)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Devoluciones registradas{filtroDia === '' ? ` · ${devoluciones.length}` : ` · ${devolucionesVisibles.length}`}
+                </p>
+                <div className="flex items-center gap-2">
+                  <DatePicker
+                    value={filtroDia === '' ? new Date().toISOString().slice(0, 10) : filtroDia}
+                    onChange={setFiltroDia}
+                    aria-label="Filtrar devoluciones por día"
+                  />
+                  {filtroDia !== '' && (
+                    <Button variant="ghost" size="sm" onClick={() => setFiltroDia('')}>
+                      Todos
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {devolucionesVisibles.length === 0 ? (
+                <p className="text-sm text-gray-500">Sin devoluciones registradas el {filtroDia}</p>
+              ) : (
+                <ul className="space-y-2">
+                  {devolucionesVisibles.map((d) => (
+                    <li key={d.id}>
+                      <div className="flex items-center justify-between gap-4 text-sm">
+                        <span className="text-gray-600">
+                          {d.fecha_devolucion?.slice(0, 10) ?? '—'} · Factura #{d.numero_factura}
+                          {d.motivo ? ` · ${d.motivo}` : ''}
+                        </span>
+                        <span className="shrink-0 font-semibold text-red-600">-{formatUsdCents(d.monto)}</span>
+                      </div>
+                      {d.detalle.length > 0 && (
+                        <ul className="mt-1 space-y-1 border-l-2 border-red-100 pl-5 text-xs text-gray-500">
+                          {d.detalle.map((p) => (
+                            <li key={p.producto_id} className="flex items-center justify-between gap-4">
+                              <span>{p.nombre} × {p.cantidad}</span>
+                              <span className="shrink-0 tabular-nums">{formatUsdCents(p.subtotal)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </Card>

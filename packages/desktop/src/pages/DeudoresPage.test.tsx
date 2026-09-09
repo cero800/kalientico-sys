@@ -170,13 +170,14 @@ describe('DeudoresPage', () => {
 
   it('lista facturas entregadas con su botón Devolver', async () => {
     vi.mocked(listarVentasEmpresa).mockResolvedValue([
-      { venta_id: 10, numero_factura: 3, tipo: 'credito', fecha: '2026-09-04', total: 5000, devuelto: 0 },
+      { venta_id: 10, numero_factura: 3, tipo: 'credito', fecha: '2026-09-01', total: 5000, devuelto: 0 },
     ] as never);
     const user = userEvent.setup();
     render(<DeudoresPage />);
     await user.click(await screen.findByText('Café del Centro'));
     expect(await screen.findByRole('button', { name: /Devolver factura 3/ })).toBeInTheDocument();
     expect(screen.getByText('Crédito')).toBeInTheDocument();
+    expect(screen.getByText('2026-09-01')).toBeInTheDocument();
   });
 
   it('registra una devolución calculando el monto por cantidad', async () => {
@@ -238,5 +239,32 @@ describe('DeudoresPage', () => {
     expect(screen.getAllByText('-$10.00').length).toBeGreaterThan(0);
     // Muestra qué productos se devolvieron dentro de la factura.
     expect(screen.getByText(/Pan Canilla × 5/)).toBeInTheDocument();
+  });
+
+  it('filtra las devoluciones registradas por día y vuelve con Todos', async () => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    const hoyDia = String(new Date().getDate());
+    vi.mocked(listarVentasEmpresa).mockResolvedValue([
+      { venta_id: 10, numero_factura: 3, tipo: 'credito', fecha: '2026-09-04', total: 5000, devuelto: 1000 },
+    ] as never);
+    vi.mocked(listarDevoluciones).mockResolvedValue([
+      { id: 1, empresa_id: 2, venta_id: 10, numero_factura: 3, monto: 1000, motivo: 'pan deteriorado', operador_id: 1, fecha_devolucion: hoy, detalle: [] },
+      { id: 2, empresa_id: 2, venta_id: 10, numero_factura: 3, monto: 2000, motivo: 'pan extraviado', operador_id: 1, fecha_devolucion: '2030-01-01', detalle: [] },
+    ] as never);
+    const user = userEvent.setup();
+    render(<DeudoresPage />);
+    await user.click(await screen.findByText('Café del Centro'));
+    expect(await screen.findByText(/pan deteriorado/)).toBeInTheDocument();
+    expect(screen.getByText(/pan extraviado/)).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Filtrar devoluciones por día'));
+    const calendario = screen.getByRole('dialog', { name: 'Calendario' });
+    await user.click(within(calendario).getByRole('button', { name: hoyDia }));
+
+    expect(screen.queryByText(/pan extraviado/)).not.toBeInTheDocument();
+    expect(screen.getByText(/pan deteriorado/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Todos' }));
+    expect(screen.getByText(/pan extraviado/)).toBeInTheDocument();
   });
 });

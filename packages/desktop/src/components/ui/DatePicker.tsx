@@ -15,6 +15,10 @@ const MESES = [
 ];
 
 function aPartes(fecha: string): { y: number; m: number; d: number } {
+  if (fecha === '') {
+    const hoy = new Date();
+    return { y: hoy.getFullYear(), m: hoy.getMonth(), d: hoy.getDate() };
+  }
   const [y, m, d] = fecha.split('-').map(Number);
   return { y: Number.isFinite(y) ? y : new Date().getFullYear(), m: (Number.isFinite(m) ? m : 1) - 1, d: Number.isFinite(d) ? d : 1 };
 }
