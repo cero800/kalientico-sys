@@ -377,6 +377,54 @@ export interface Factura {
 }
 
 //---------------------------------------------------------------------------
+// Ticket térmico 80 mm (impresión directa ESC/POS)
+//---------------------------------------------------------------------------
+
+export interface TicketLinea {
+  producto: string;
+  cantidad: number;
+  subtotal: number;
+}
+
+export interface TicketPago {
+  tipo_pago: string;
+  moneda: string;
+  monto: number;
+  numero_referencia: string | null;
+}
+
+export interface TicketDevolucionLinea {
+  nombre: string;
+  cantidad: number;
+  subtotal: number;
+}
+
+export interface TicketDevolucion {
+  fecha_devolucion: string;
+  motivo: string | null;
+  monto: number;
+  detalle: TicketDevolucionLinea[];
+}
+
+export interface TicketInput {
+  negocio_nombre: string;
+  negocio_rif: string;
+  negocio_telefono: string;
+  negocio_direccion: string;
+  numero_factura: number;
+  fecha: string;
+  cliente: string;
+  cliente_rif: string;
+  subtotal: number;
+  descuento: number;
+  total: number;
+  tasa_cambio: number;
+  detalle: TicketLinea[];
+  pagos: TicketPago[];
+  devoluciones: TicketDevolucion[];
+}
+
+//---------------------------------------------------------------------------
 // Cierre de caja (comprobante del día)
 //---------------------------------------------------------------------------
 

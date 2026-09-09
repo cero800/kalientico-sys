@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FileDown, Printer, X } from 'lucide-react';
-import type { Factura } from '@panaderia/core';
+import { FileDown, Printer, Receipt, X } from 'lucide-react';
+import type { Factura, TicketInput } from '@panaderia/core';
 import { TIPO_PAGO_LABELS } from '@panaderia/core';
 import { formatCents, formatUsdCents } from '../../lib/format';
 import { facturaPdfB64, nombreArchivoFactura } from '../../lib/facturaPdf';
-import { guardarFacturaPdf } from '../../services/db';
+import { guardarFacturaPdf, imprimirTicket } from '../../services/db';
 import { Button } from './Button';
+import { ConfigurarImpresoraModal } from './ConfigurarImpresoraModal';
 
 interface Props {
   factura: Factura | null;
@@ -19,11 +20,45 @@ function fechaLegible(fecha: string): string {
   return d.toLocaleDateString('es-VE', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+/// Convierte la factura en los datos mínimos que necesita el ticket térmico.
+function aTicket(f: Factura): TicketInput {
+  return {
+    negocio_nombre: f.negocio_nombre,
+    negocio_rif: f.negocio_rif,
+    negocio_telefono: f.negocio_telefono,
+    negocio_direccion: f.negocio_direccion,
+    numero_factura: f.numero_factura,
+    fecha: f.fecha,
+    cliente: f.cliente,
+    cliente_rif: f.cliente_rif,
+    subtotal: f.subtotal,
+    descuento: f.descuento,
+    total: f.total,
+    tasa_cambio: f.tasa_cambio,
+    detalle: f.detalle.map((d) => ({ producto: d.producto, cantidad: d.cantidad, subtotal: d.subtotal })),
+    pagos: f.pagos.map((p) => ({
+      tipo_pago: p.tipo_pago,
+      moneda: p.moneda,
+      monto: p.monto,
+      numero_referencia: p.numero_referencia ?? null,
+    })),
+    devoluciones: f.devoluciones.map((d) => ({
+      fecha_devolucion: d.fecha_devolucion,
+      motivo: d.motivo ?? null,
+      monto: d.monto,
+      detalle: d.detalle.map((p) => ({ nombre: p.nombre, cantidad: p.cantidad, subtotal: p.subtotal })),
+    })),
+  };
+}
+
 export function FacturaModal({ factura, onClose }: Props) {
   const [imprimiendo, setImprimiendo] = useState(false);
   const [guardandoPdf, setGuardandoPdf] = useState(false);
   const [rutaPdf, setRutaPdf] = useState<string | null>(null);
   const [errorPdf, setErrorPdf] = useState<string | null>(null);
+  const [ticketEnviando, setTicketEnviando] = useState(false);
+  const [ticketMsg, setTicketMsg] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
+  const [configAbierto, setConfigAbierto] = useState(false);
   const guardadas = useRef<Set<number>>(new Set());
 
   const guardarPdf = async () => {
@@ -45,6 +80,7 @@ export function FacturaModal({ factura, onClose }: Props) {
   useEffect(() => {
     setRutaPdf(null);
     setErrorPdf(null);
+    setTicketMsg(null);
     if (factura && !guardadas.current.has(factura.venta_id)) {
       guardarPdf();
     }
@@ -54,6 +90,20 @@ export function FacturaModal({ factura, onClose }: Props) {
   useEffect(() => {
     setImprimiendo(false);
   }, [factura?.venta_id]);
+
+  const enviarTicket = async () => {
+    if (!factura) return;
+    setTicketEnviando(true);
+    setTicketMsg(null);
+    try {
+      await imprimirTicket(aTicket(factura));
+      setTicketMsg({ tipo: 'ok', texto: 'Ticket enviado a la impresora térmica.' });
+    } catch (e) {
+      setTicketMsg({ tipo: 'error', texto: String(e) });
+    } finally {
+      setTicketEnviando(false);
+    }
+  };
 
   if (!factura) return null;
 
@@ -92,10 +142,27 @@ export function FacturaModal({ factura, onClose }: Props) {
             {errorPdf && (
               <p className="mt-0.5 text-xs text-red-600">No se pudo guardar el PDF: {errorPdf}</p>
             )}
+            {ticketMsg && (
+              <p className={`mt-0.5 text-xs ${ticketMsg.tipo === 'ok' ? 'text-emerald-600' : 'text-red-600'}`}>
+                {ticketMsg.texto}
+                {ticketMsg.tipo === 'error' && (
+                  <button
+                    type="button"
+                    onClick={() => setConfigAbierto(true)}
+                    className="ml-2 font-medium underline underline-offset-2"
+                  >
+                    Configurar impresora
+                  </button>
+                )}
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <Button onClick={guardarPdf} disabled={guardandoPdf}>
               <FileDown className="h-4 w-4" /> {guardandoPdf ? 'Guardando…' : 'Guardar PDF'}
+            </Button>
+            <Button variant="secondary" onClick={enviarTicket} disabled={ticketEnviando}>
+              <Receipt className="h-4 w-4" /> {ticketEnviando ? 'Enviando…' : 'Térmica'}
             </Button>
             <Button onClick={imprimir} disabled={imprimiendo}>
               <Printer className="h-4 w-4" /> Imprimir
@@ -235,6 +302,15 @@ export function FacturaModal({ factura, onClose }: Props) {
             </p>
           </div>
         </div>
+
+        <ConfigurarImpresoraModal
+          open={configAbierto}
+          onClose={() => setConfigAbierto(false)}
+          onGuardado={(v) => {
+            setTicketMsg({ tipo: 'ok', texto: `Impresora configurada: ${v}` });
+            enviarTicket();
+          }}
+        />
       </div>
     </div>,
     document.body,

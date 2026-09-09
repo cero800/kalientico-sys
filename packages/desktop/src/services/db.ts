@@ -24,6 +24,7 @@ import type {
   ProductoInput,
   ResumenDia,
   StockItem,
+  TicketInput,
   Usuario,
   UsuarioInput,
   Venta,
@@ -60,6 +61,7 @@ export type {
   ResumenDia,
   ResumenDiaVenta,
   StockItem,
+  TicketInput,
 UnidadMedida,
   Usuario,
   UsuarioInput,
@@ -161,6 +163,12 @@ export const getFactura = (venta_id: number) => invoke<Factura>('obtener_factura
 // Guarda el PDF de la factura en Documentos/kalientico/facturas/ y devuelve la ruta.
 export const guardarFacturaPdf = (nombre_archivo: string, contenido_b64: string) =>
   invoke<string>('guardar_factura_pdf', { nombreArchivo: nombre_archivo, contenidoB64: contenido_b64 });
+
+// Impresión térmica (ESC/POS) directa sin diálogo.
+export const imprimirTicket = (ticket: TicketInput) => invoke('imprimir_ticket', { ticket });
+export const listarImpresoras = () => invoke<string[]>('listar_impresoras');
+export const probarImpresora = () => invoke('probar_impresora');
+export const IMPRESORA_TERMICA_KEY = 'impresora_termica';
 
 export const guardarReporteExcel = (nombre_archivo: string, contenido_b64: string) =>
   invoke<string>('guardar_reporte_excel', { nombreArchivo: nombre_archivo, contenidoB64: contenido_b64 });

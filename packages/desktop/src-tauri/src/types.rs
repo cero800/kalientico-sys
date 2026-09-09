@@ -403,6 +403,61 @@ pub struct Factura {
     pub pagos: Vec<FacturaPago>,
     pub devoluciones: Vec<ResumenDiaDevolucion>,
 }
+// ---- Ticket térmico (impresión directa 80 mm) ----
+
+/// Una línea del ticket: producto, cantidad vendida y subtotal en centavos de US$.
+#[derive(Deserialize, Clone)]
+pub struct TicketLinea {
+    pub producto: String,
+    pub cantidad: f64,
+    pub subtotal: i64,
+}
+
+/// Forma de pago del ticket: `tipo_pago` y `moneda` como strings legibles.
+#[derive(Deserialize, Clone)]
+pub struct TicketPago {
+    pub tipo_pago: String,
+    pub moneda: String,
+    pub monto: i64,
+    pub numero_referencia: Option<String>,
+}
+
+/// Devolución mostrada en el ticket (informativa).
+#[derive(Deserialize, Clone)]
+pub struct TicketDevolucionLinea {
+    pub nombre: String,
+    pub cantidad: f64,
+    pub subtotal: i64,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct TicketDevolucion {
+    pub fecha_devolucion: String,
+    pub motivo: Option<String>,
+    pub monto: i64,
+    pub detalle: Vec<TicketDevolucionLinea>,
+}
+
+/// Datos mínimos que necesita el ticket térmico (los trae el frontend desde la
+/// `Factura` ya cargada; se envían a Rust solo para imprimir).
+#[derive(Deserialize, Clone)]
+pub struct TicketInput {
+    pub negocio_nombre: String,
+    pub negocio_rif: String,
+    pub negocio_telefono: String,
+    pub negocio_direccion: String,
+    pub numero_factura: i64,
+    pub fecha: String,
+    pub cliente: String,
+    pub cliente_rif: String,
+    pub subtotal: i64,
+    pub descuento: i64,
+    pub total: i64,
+    pub tasa_cambio: f64,
+    pub detalle: Vec<TicketLinea>,
+    pub pagos: Vec<TicketPago>,
+    pub devoluciones: Vec<TicketDevolucion>,
+}
 
 // ---- Cierre de caja (comprobante del día) ----
 

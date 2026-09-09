@@ -3,9 +3,11 @@ mod caja;
 mod db;
 mod devoluciones;
 mod factura;
+mod impresora;
 mod pagos;
 mod repo;
 mod reporte;
+mod ticket;
 mod types;
 mod validators;
 mod ventas;
@@ -365,6 +367,25 @@ fn guardar_factura_pdf(
     Ok(ruta.to_string_lossy().to_string())
 }
 
+/// Imprime el ticket térmico (ESC/POS) de una factura en la impresora
+/// configurada en `config.impresora_termica` (ruta de dispositivo o cola CUPS).
+#[tauri::command]
+fn imprimir_ticket(state: State<'_, Db>, ticket: types::TicketInput) -> Result<(), String> {
+    impresora::imprimir(&*lock(&state)?, &crate::ticket::ticket_factura(&ticket))
+}
+
+/// Lista candidatas de impresora térmica: colas CUPS y puertos /dev/usb/lp*.
+#[tauri::command]
+fn listar_impresoras() -> Vec<String> {
+    impresora::listar_impresoras()
+}
+
+/// Imprime un ticket de prueba para verificar la impresora configurada.
+#[tauri::command]
+fn probar_impresora(state: State<'_, Db>) -> Result<(), String> {
+    impresora::probar(&*lock(&state)?)
+}
+
 #[tauri::command]
 fn crear_backup(state: State<'_, Db>, app: tauri::AppHandle) -> Result<types::BackupItem, String> {
     let item = backup::crear_backup(&*lock(&state)?, &app)?;
@@ -570,6 +591,9 @@ pub fn run() {
             set_config,
             obtener_factura,
             guardar_factura_pdf,
+            imprimir_ticket,
+            listar_impresoras,
+            probar_impresora,
             guardar_reporte_excel,
         ])
         .run(tauri::generate_context!())

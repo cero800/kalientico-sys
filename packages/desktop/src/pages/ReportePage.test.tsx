@@ -7,6 +7,11 @@ vi.mock('../services/db', () => ({
   resumenDia: vi.fn(),
   getFactura: vi.fn(),
   guardarReporteExcel: vi.fn(),
+  imprimirTicket: vi.fn(),
+  listarImpresoras: vi.fn(),
+  probarImpresora: vi.fn(),
+  getConfig: vi.fn(),
+  setConfig: vi.fn(),
 }));
 
 const resumen = {

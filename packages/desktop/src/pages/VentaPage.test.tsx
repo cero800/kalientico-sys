@@ -46,6 +46,11 @@ vi.mock('../services/db', () => ({
   ),
   crearVenta: vi.fn(),
   getFactura: vi.fn(),
+  imprimirTicket: vi.fn(),
+  listarImpresoras: vi.fn(),
+  probarImpresora: vi.fn(),
+  getConfig: vi.fn(),
+  setConfig: vi.fn(),
 }));
 
 beforeEach(() => {
