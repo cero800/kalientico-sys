@@ -390,6 +390,7 @@ pub struct Factura {
     pub fecha: String,
     pub cliente: String,
     pub cliente_rif: String,
+    pub dias_credito: i64,
     pub negocio_nombre: String,
     pub negocio_rif: String,
     pub negocio_telefono: String,
@@ -457,6 +458,8 @@ pub struct TicketInput {
     pub detalle: Vec<TicketLinea>,
     pub pagos: Vec<TicketPago>,
     pub devoluciones: Vec<TicketDevolucion>,
+    /// Recordatorio de pago (factura a crédito próxima a vencer) o None.
+    pub recordatorio: Option<String>,
 }
 
 // ---- Cierre de caja (comprobante del día) ----

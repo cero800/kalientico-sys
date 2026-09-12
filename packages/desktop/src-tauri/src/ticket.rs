@@ -217,37 +217,51 @@ pub fn ticket_factura(f: &TicketInput) -> Vec<u8> {
         out.extend(linea(&trunca(&etiqueta, ANCHO)));
     }
 
-    // Devoluciones (informativo): qué se devolvió y el saldo neto de la venta.
-    if !f.devoluciones.is_empty() {
-        out.extend(linea(&separador()));
-        out.extend(negrita(true));
-        out.extend(linea("DEVOLUCIONES"));
-        out.extend(negrita(false));
-        for dev in &f.devoluciones {
-            let meta = formato_devolucion(dev);
-            out.extend(linea(&trunca(&fila(&meta, &fmt_usd(dev.monto)), ANCHO)));
-            for dl in &dev.detalle {
-                let der = fmt_usd(dl.subtotal);
-                let izq = format!("  {} × {}", dl.nombre, fmt_cantidad(dl.cantidad));
-                out.extend(linea(&fila(
-                    &trunca(&izq, ANCHO - der.chars().count()),
-                    &der,
-                )));
-            }
+    // Recordatorio de pago (factura a crédito próxima a vencer).
+    if let Some(r) = f.recordatorio.as_deref() {
+        if !r.trim().is_empty() {
+            out.extend(linea(&separador()));
+            out.extend(linea(&centrar(&trunca(r, ANCHO))));
         }
+    }
+
+    // NOTA: (espacio para anotaciones a mano sobre el comprobante).
+    out.extend(linea(&separador()));
+    out.extend(linea("NOTA:"));
+
+    // DEVOLUCION: (informativo si hay devoluciones registradas, si no queda en blanco).
+    out.extend(linea(&separador()));
+    out.extend(negrita(true));
+    out.extend(linea("DEVOLUCION:"));
+    out.extend(negrita(false));
+    for dev in &f.devoluciones {
+        let meta = formato_devolucion(dev);
+        out.extend(linea(&trunca(&fila(&meta, &fmt_usd(dev.monto)), ANCHO)));
+        for dl in &dev.detalle {
+            let der = fmt_usd(dl.subtotal);
+            let izq = format!("  {} × {}", dl.nombre, fmt_cantidad(dl.cantidad));
+            out.extend(linea(&fila(
+                &trunca(&izq, ANCHO - der.chars().count()),
+                &der,
+            )));
+        }
+    }
+    if !f.devoluciones.is_empty() {
         let neto = (f.total - f.devoluciones.iter().map(|d| d.monto).sum::<i64>()).max(0);
         out.extend(negrita(true));
         out.extend(linea(&fila("Saldo final (neto)", &fmt_usd(neto))));
         out.extend(negrita(false));
     }
 
-    // Pie.
+    // Pie: tasa (si aplica) y el agradecimiento.
     out.extend(linea(&separador()));
-    out.extend(linea(&centrar(&if f.tasa_cambio > 0.0 {
-        format!("Tasa: Bs {} por US$ 1", fmt_tasa(f.tasa_cambio))
-    } else {
-        "Gracias por su compra".to_string()
-    })));
+    if f.tasa_cambio > 0.0 {
+        out.extend(linea(&centrar(&format!(
+            "Tasa: Bs {} por US$ 1",
+            fmt_tasa(f.tasa_cambio)
+        ))));
+    }
+    out.extend(linea(&centrar("Gracias por su compra!!")));
     out.extend(linea(""));
     out.extend(linea(""));
 
@@ -295,6 +309,7 @@ mod tests {
                 numero_referencia: Some("R-001".to_string()),
             }],
             devoluciones: vec![],
+            recordatorio: None,
         }
     }
 
@@ -341,6 +356,9 @@ mod tests {
         assert!(texto.contains("Pago móvil Bs · Ref. R-001"));
         assert!(texto.contains("Bs 552,75"));
         assert!(texto.contains("Tasa: Bs 36,85 por US$ 1"));
+        assert!(texto.contains("NOTA:"));
+        assert!(texto.contains("DEVOLUCION:"));
+        assert!(texto.contains("Gracias por su compra!!"));
     }
 
     #[test]
@@ -367,10 +385,19 @@ mod tests {
         t.total = 1500;
         let texto = texto(&ticket_factura(&t));
 
-        assert!(texto.contains("DEVOLUCIONES"));
+        assert!(texto.contains("DEVOLUCION:"));
         assert!(texto.contains("pan deteriorado"));
         assert!(texto.contains("Saldo final (neto)"));
         assert!(texto.contains("$10.00"), "neto = 15 - 5");
+    }
+
+    #[test]
+    fn ticket_muestra_el_recordatorio_de_pago() {
+        let mut t = ticket();
+        t.recordatorio = Some("Recuerde: su pago vence el 10/09/2026".to_string());
+        let texto = texto(&ticket_factura(&t));
+
+        assert!(texto.contains("Recuerde: su pago vence el 10/09/2026"));
     }
 
     #[test]

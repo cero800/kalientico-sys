@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useSesion } from '../../store/sesion';
 import { formatUsdCents, formatVesCents } from '../../lib/format';
+import { STOCK_BAJO } from '../../lib/stock';
 
 export function ProductoCard({
   nombre,
@@ -19,6 +20,7 @@ export function ProductoCard({
   onAgregar: () => void;
   deshabilitado?: boolean;
 }) {
+  const stockBajo = typeof stock === 'number' && stock > 0 && stock <= STOCK_BAJO;
   return (
     <button
       type="button"
@@ -29,7 +31,11 @@ export function ProductoCard({
       <div className="flex items-start justify-between gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-gray-400">{codigo}</span>
         {typeof stock === 'number' && (
-          <span className="rounded-full bg-gray-50 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+              stockBajo ? 'bg-red-50 font-bold text-red-600' : 'bg-gray-50 text-gray-500'
+            }`}
+          >
             {stock}
           </span>
         )}

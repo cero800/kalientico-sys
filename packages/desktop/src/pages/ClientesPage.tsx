@@ -27,6 +27,7 @@ export default function ClientesPage() {
   const [cargando, setCargando] = useState(true);
   const [modalNuevo, setModalNuevo] = useState(false);
   const [form, setForm] = useState<EmpresaInput>(empresaVacia());
+  const [limiteTex, setLimiteTex] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -43,9 +44,10 @@ export default function ClientesPage() {
     setGuardando(true);
     setError(null);
     try {
-      await crearEmpresa(form);
+      await crearEmpresa({ ...form, limite_credito: parseCentsInput(limiteTex, 'usd') ?? 0 });
       setModalNuevo(false);
       setForm(empresaVacia());
+      setLimiteTex('');
       cargar();
     } catch (e) {
       setError(String(e));
@@ -72,7 +74,7 @@ export default function ClientesPage() {
         title="Clientes"
         subtitle={`${clientes.length} registrados`}
         actions={
-          <Button onClick={() => { setError(null); setForm(empresaVacia()); setModalNuevo(true); }}>
+          <Button onClick={() => { setError(null); setForm(empresaVacia()); setLimiteTex(''); setModalNuevo(true); }}>
             <Plus className="h-4 w-4" /> Nuevo cliente
           </Button>
         }
@@ -150,8 +152,10 @@ export default function ClientesPage() {
           <Input
             label="Límite de crédito (US$)"
             prefix="$"
-            value={form.limite_credito ? formatUsdCents(form.limite_credito) : ''}
-            onChange={(e) => setForm({ ...form, limite_credito: parseCentsInput(e.target.value, 'usd') ?? 0 })}
+            inputMode="decimal"
+            placeholder="0.00"
+            value={limiteTex}
+            onChange={(e) => setLimiteTex(e.target.value)}
           />
         </div>
       </Modal>

@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Minus, Plus, Search, ShoppingCart, Trash2, Users, X } from 'lucide-react';
+import { Minus, Plus, Search, ShoppingCart, Trash2, X } from 'lucide-react';
 import type { Empresa, Factura, Producto, VentaInput } from '@panaderia/core';
-import { crearVenta, getFactura, listarEmpresas, listarPreciosCliente, listarProductos, listarStock } from '../services/db';
+import {
+  crearVenta,
+  getFactura,
+  listarEmpresas,
+  listarPreciosCliente,
+  listarProductos,
+  listarStock,
+} from '../services/db';
 import { useCarrito } from '../store/carrito';
 import { useSesion } from '../store/sesion';
 import { formatUsdCents, formatVesCents } from '../lib/format';
+import { STOCK_BAJO } from '../lib/stock';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -12,11 +20,9 @@ import { Modal } from '../components/ui/Modal';
 import { PageLoader } from '../components/ui/Spinner';
 import { FacturaModal } from '../components/ui/FacturaModal';
 import { ProductoCard } from './venta/ProductoCard';
+import ClienteAutocomplete, { esMostrador } from './venta/ClienteAutocomplete';
+import PrecioEspecialModal from './venta/PrecioEspecialModal';
 import CobroModal from './venta/CobroModal';
-
-function esMostrador(e: Empresa) {
-  return e.rut_nit === '0';
-}
 
 export default function VentaPage() {
   const tasa = useSesion((s) => s.tasa);
@@ -29,6 +35,7 @@ export default function VentaPage() {
   const [preciosEspeciales, setPreciosEspeciales] = useState<Record<number, number>>({});
   const [cargando, setCargando] = useState(true);
   const [cobroAbierto, setCobroAbierto] = useState(false);
+  const [preciosAbierto, setPreciosAbierto] = useState(false);
   const [factura, setFactura] = useState<Factura | null>(null);
   const [cantidadPara, setCantidadPara] = useState<Producto | null>(null);
   const [cantidad, setCantidad] = useState('1');
@@ -48,16 +55,36 @@ export default function VentaPage() {
       .finally(() => setCargando(false));
   }, []);
 
+  const recargarPrecios = async (empresaId: number) => {
+    try {
+      const precios = await listarPreciosCliente(empresaId);
+      const mapa = Object.fromEntries(precios.map((p) => [p.producto_id, p.precio_especial]));
+      setPreciosEspeciales(mapa);
+      useCarrito
+        .getState()
+        .aplicarPrecios(new Map(Object.entries(mapa).map(([k, v]) => [Number(k), v])));
+    } catch {
+      setPreciosEspeciales({});
+    }
+  };
+
   useEffect(() => {
     if (clienteId == null) return;
-    listarPreciosCliente(clienteId)
-      .then((precios) => {
-        const mapa = Object.fromEntries(precios.map((p) => [p.producto_id, p.precio_especial]));
-        setPreciosEspeciales(mapa);
-        useCarrito.getState().aplicarPrecios(new Map(Object.entries(mapa).map(([k, v]) => [Number(k), v])));
-      })
-      .catch(() => setPreciosEspeciales({}));
+    void recargarPrecios(clienteId);
   }, [clienteId]);
+
+  // F6 abre/cierra el modal de precio especial del cliente seleccionado.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'F6') {
+        e.preventDefault();
+        const actual = empresas.find((x) => x.id === clienteId) ?? null;
+        if (actual && !esMostrador(actual)) setPreciosAbierto((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [empresas, clienteId]);
 
   const clienteActual = empresas.find((e) => e.id === clienteId) ?? null;
   const sePermiteCredito = clienteActual != null && !esMostrador(clienteActual);
@@ -164,23 +191,11 @@ export default function VentaPage() {
         <CardHeader title="Carrito" subtitle={`Tasa ${formatVesCents(Math.round(tasa * 100))}`} />
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="px-3 pt-2">
-            <label htmlFor="cliente-venta" className="mb-1 block text-xs font-medium text-gray-500">
-              <span className="inline-flex items-center gap-1">
-                <Users className="h-3 w-3" /> Cliente
-              </span>
-            </label>
-            <select
-              id="cliente-venta"
-              value={clienteId ?? ''}
-              onChange={(e) => setClienteId(Number(e.target.value))}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-            >
-              {empresas.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre_comercial}
-                </option>
-              ))}
-            </select>
+            <ClienteAutocomplete
+              empresas={empresas}
+              clienteId={clienteId}
+              onChange={(id) => setClienteId(id)}
+            />
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
@@ -240,6 +255,16 @@ export default function VentaPage() {
                 ≈ {formatVesCents(Math.round(subtotal * tasa))}
               </p>
             )}
+            {clienteActual && !esMostrador(clienteActual) && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="mb-2 w-full"
+                onClick={() => setPreciosAbierto(true)}
+              >
+                Precio cliente (F6)
+              </Button>
+            )}
             <Button className="w-full" size="lg" disabled={lineas.length === 0} onClick={() => setCobroAbierto(true)}>
               Cobrar
             </Button>
@@ -257,6 +282,15 @@ export default function VentaPage() {
           onConfirmar={confirmarVenta}
         />
       )}
+
+      <PrecioEspecialModal
+        abierto={preciosAbierto}
+        empresa={clienteActual}
+        productos={productos}
+        preciosEspeciales={preciosEspeciales}
+        onCerrar={() => setPreciosAbierto(false)}
+        onGuardado={() => clienteId != null && void recargarPrecios(clienteId)}
+      />
 
       {/* Pide la cantidad al agregar un producto */}
       <Modal
@@ -279,7 +313,15 @@ export default function VentaPage() {
             <p className="text-sm text-gray-600">
               Precio unitario <strong>{formatUsdCents(efectivoDe(cantidadPara))}</strong>
               {stock[cantidadPara.id] != null && (
-                <span className="ml-2 text-xs text-gray-400">Disponible: {stock[cantidadPara.id]}</span>
+                <span
+                  className={`ml-2 text-xs ${
+                    (stock[cantidadPara.id] ?? 0) <= STOCK_BAJO
+                      ? 'font-semibold text-red-600'
+                      : 'text-gray-400'
+                  }`}
+                >
+                  Disponible: {stock[cantidadPara.id]}
+                </span>
               )}
             </p>
           )}

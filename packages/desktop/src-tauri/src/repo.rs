@@ -521,6 +521,20 @@ pub fn set_precio_cliente(conn: &Connection, p: &PrecioClienteInput) -> Result<(
     Ok(())
 }
 
+/// Quita el precio especial de un producto para un cliente (vuelve al base).
+pub fn eliminar_precio_cliente(
+    conn: &Connection,
+    empresa_id: i64,
+    producto_id: i64,
+) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM precios_cliente WHERE empresa_id = ?1 AND producto_id = ?2",
+        params![empresa_id, producto_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ------------------------------------------------------------
 // Usuarios (seed admin al arrancar)
 // ------------------------------------------------------------

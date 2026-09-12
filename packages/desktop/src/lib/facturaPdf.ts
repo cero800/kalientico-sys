@@ -4,6 +4,7 @@
 import type { Factura } from '@panaderia/core';
 import { TIPO_PAGO_LABELS } from '@panaderia/core';
 import { formatCents, formatUsdCents } from './format';
+import { calcularRecordatorio, leerRecordatorioDias } from './factura';
 
 const MARGEN = 12;
 
@@ -23,6 +24,17 @@ export async function facturaPdfB64(f: Factura): Promise<string> {
   const centro = w / 2;
 
   let y = 16;
+
+  // Salta de página si el siguiente bloque no cabe en la hoja.
+  const salto = (alto: number) => {
+    const altoMax = doc.internal.pageSize.getHeight() - 24;
+    if (y + alto > altoMax) {
+      doc.addPage();
+      y = 16;
+    }
+  };
+
+  const recordatorio = calcularRecordatorio(f, await leerRecordatorioDias());
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
@@ -132,16 +144,52 @@ export async function facturaPdfB64(f: Factura): Promise<string> {
     y += 5;
   });
 
-  // Devoluciones: qué se devolvió y cómo quedó el saldo neto de la venta.
-  if (f.devoluciones.length > 0) {
-    doc.setFont('helvetica', 'bold');
+  // Recordatorio de pago (factura a crédito próxima a vencer).
+  if (recordatorio) {
+    salto(12);
     doc.setLineWidth(0.3);
     doc.line(MARGEN, y, w - MARGEN, y);
-    y += 4;
-    doc.text('DEVOLUCIONES (PANES DETERIORADOS)', MARGEN, y);
-    y += 4;
+    y += 5;
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(recordatorio, centro, y, { align: 'center' });
+    y += 7;
+  }
+
+  // NOTA: (espacio para anotaciones a mano sobre el comprobante).
+  salto(18);
+  doc.setLineWidth(0.3);
+  doc.line(MARGEN, y, w - MARGEN, y);
+  y += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('NOTA:', MARGEN, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  [0, 1, 2].forEach(() => {
+    doc.setLineWidth(0.2);
+    doc.line(MARGEN, y, w - MARGEN, y);
+    y += 4;
+  });
+
+  // DEVOLUCION: (si hay devoluciones registradas se listan, si no queda en blanco).
+  salto(18);
+  doc.setLineWidth(0.3);
+  doc.line(MARGEN, y, w - MARGEN, y);
+  y += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('DEVOLUCION:', MARGEN, y);
+  y += 5;
+  if (f.devoluciones.length === 0) {
+    [0, 1].forEach(() => {
+      doc.setLineWidth(0.2);
+      doc.line(MARGEN, y, w - MARGEN, y);
+      y += 4;
+    });
+  } else {
     f.devoluciones.forEach((dev) => {
+      salto(12);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       const motivo = dev.motivo ? ` · ${dev.motivo}` : '';
@@ -158,22 +206,27 @@ export async function facturaPdfB64(f: Factura): Promise<string> {
     });
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    const neto =
-      f.total - f.devoluciones.reduce((s, d) => s + d.monto, 0);
+    const neto = f.total - f.devoluciones.reduce((s, d) => s + d.monto, 0);
     doc.text('Saldo final de la venta (neto)', MARGEN, y);
     doc.text(formatUsdCents(Math.max(neto, 0)), colSub, y, { align: 'right' });
-    y += 5;
+    y += 6;
   }
 
-  // Tasa
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text(
-    f.tasa_cambio > 0 ? `Tasa: Bs ${f.tasa_cambio.toFixed(2)} por US$ 1` : 'Gracias por su compra',
-    centro,
-    doc.internal.pageSize.getHeight() - 12,
-    { align: 'center' },
-  );
+  // Pie: tasa (si aplica) y el agradecimiento, centrados.
+  salto(14);
+  y += 2;
+  doc.setLineWidth(0.6);
+  doc.line(MARGEN, y, w - MARGEN, y);
+  y += 6;
+  if (f.tasa_cambio > 0) {
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Tasa: Bs ${f.tasa_cambio.toFixed(2)} por US$ 1`, centro, y, { align: 'center' });
+    y += 5;
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Gracias por su compra!!', centro, y, { align: 'center' });
 
   return doc.output('datauristring').split(',')[1] ?? '';
 }

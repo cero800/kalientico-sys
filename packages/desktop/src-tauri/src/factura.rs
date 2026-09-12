@@ -51,11 +51,11 @@ pub fn factura_venta(conn: &Connection, venta_id: i64) -> Result<Factura, String
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Venta no encontrada".to_string())?;
 
-    let (cliente, cliente_rif): (String, String) = conn
+    let (cliente, cliente_rif, dias_credito): (String, String, i64) = conn
         .query_row(
-            "SELECT nombre_comercial, rut_nit FROM empresas WHERE id = ?1",
+            "SELECT nombre_comercial, rut_nit, dias_credito FROM empresas WHERE id = ?1",
             params![empresa_id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .map_err(|_| "Cliente no encontrado".to_string())?;
 
@@ -156,6 +156,7 @@ pub fn factura_venta(conn: &Connection, venta_id: i64) -> Result<Factura, String
         fecha,
         cliente,
         cliente_rif,
+        dias_credito,
         negocio_nombre: negocio(KEY_NEGOCIO_NOMBRE),
         negocio_rif: negocio(KEY_NEGOCIO_RIF),
         negocio_telefono: negocio(KEY_NEGOCIO_TELEFONO),
@@ -214,6 +215,7 @@ mod tests {
         let f = factura_venta(&conn, v.id).unwrap();
         assert_eq!(f.numero_factura, 1);
         assert_eq!(f.cliente, "Pan S.A.");
+        assert_eq!(f.dias_credito, 30);
         assert_eq!(f.negocio_nombre, "Panadería El Trigal");
         assert_eq!(f.negocio_rif, "J-99999999-9");
         assert_eq!(f.total, 20_00);

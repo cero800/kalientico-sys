@@ -242,8 +242,9 @@ describe('DeudoresPage', () => {
   });
 
   it('filtra las devoluciones registradas por día y vuelve con Todos', async () => {
-    const hoy = new Date().toISOString().slice(0, 10);
-    const hoyDia = String(new Date().getDate());
+    const ahora = new Date();
+    const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+    const hoyDia = String(ahora.getDate());
     vi.mocked(listarVentasEmpresa).mockResolvedValue([
       { venta_id: 10, numero_factura: 3, tipo: 'credito', fecha: '2026-09-04', total: 5000, devuelto: 1000 },
     ] as never);

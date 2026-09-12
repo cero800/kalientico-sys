@@ -96,6 +96,15 @@ fn set_precio_cliente(state: State<'_, Db>, precio: PrecioClienteInput) -> Resul
     repo::set_precio_cliente(&*lock(&state)?, &precio)
 }
 
+#[tauri::command(rename_all = "snake_case")]
+fn eliminar_precio_cliente(
+    state: State<'_, Db>,
+    empresa_id: i64,
+    producto_id: i64,
+) -> Result<(), String> {
+    repo::eliminar_precio_cliente(&*lock(&state)?, empresa_id, producto_id)
+}
+
 //---------------------------------------------------------------------------
 // Comandos — Usuarios
 //---------------------------------------------------------------------------
@@ -557,6 +566,7 @@ pub fn run() {
             eliminar_producto,
             listar_precios_cliente,
             set_precio_cliente,
+            eliminar_precio_cliente,
             listar_usuarios,
             crear_usuario,
             verificar_pin,

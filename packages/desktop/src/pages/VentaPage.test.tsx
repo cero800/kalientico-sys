@@ -14,6 +14,7 @@ const facturaMock = {
   fecha: '2026-09-04',
   cliente: 'Consumidor Final',
   cliente_rif: '0',
+  dias_credito: 0,
   negocio_nombre: 'Panadería Kalientico',
   negocio_rif: '',
   negocio_telefono: '',
@@ -44,6 +45,8 @@ vi.mock('../services/db', () => ({
   listarPreciosCliente: vi.fn().mockImplementation((empresaId: number) =>
     empresaId === 2 ? Promise.resolve([{ id: 1, empresa_id: 2, producto_id: 1, precio_especial: 900 }]) : Promise.resolve([]),
   ),
+  setPrecioCliente: vi.fn(),
+  eliminarPrecioCliente: vi.fn(),
   crearVenta: vi.fn(),
   getFactura: vi.fn(),
   imprimirTicket: vi.fn(),
@@ -119,7 +122,11 @@ describe('VentaPage', () => {
     render(<VentaPage />);
     await screen.findByText('Pan Canilla');
 
-    await user.selectOptions(screen.getByLabelText(/Cliente/i), '2');
+    const cliente = screen.getByLabelText(/Cliente/i);
+    await user.click(cliente);
+    await user.type(cliente, 'J-123');
+    await user.click(await screen.findByRole('option', { name: /Café del Centro/i }));
+
     await waitFor(() => expect(screen.getByText('$9.00')).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: /Pan Canilla/i }));

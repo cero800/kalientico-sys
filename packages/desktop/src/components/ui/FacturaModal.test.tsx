@@ -28,6 +28,7 @@ const factura: Factura = {
   fecha: '2026-09-04',
   cliente: 'Consumidor Final',
   cliente_rif: '',
+  dias_credito: 0,
   negocio_nombre: 'Panadería Kalientico',
   negocio_rif: 'J-99999999-9',
   negocio_telefono: '',

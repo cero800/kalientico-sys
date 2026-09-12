@@ -127,6 +127,7 @@ pub fn probar(conn: &Connection) -> Result<(), String> {
         detalle: vec![],
         pagos: vec![],
         devoluciones: vec![],
+        recordatorio: None,
     };
     imprimir(conn, &ticket::ticket_factura(&prueba))
 }

@@ -86,6 +86,8 @@ export const eliminarProducto = (id: number) => invoke('eliminar_producto', { id
 
 export const listarPreciosCliente = (empresa_id: number) => invoke<PrecioCliente[]>('listar_precios_cliente', { empresa_id });
 export const setPrecioCliente = (precio: PrecioClienteInput) => invoke('set_precio_cliente', { precio });
+export const eliminarPrecioCliente = (empresa_id: number, producto_id: number) =>
+  invoke<void>('eliminar_precio_cliente', { empresa_id, producto_id });
 
 // Usuarios
 export const listarUsuarios = () => invoke<Usuario[]>('listar_usuarios');

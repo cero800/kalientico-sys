@@ -4,6 +4,7 @@ import { FileDown, Printer, Receipt, X } from 'lucide-react';
 import type { Factura, TicketInput } from '@panaderia/core';
 import { TIPO_PAGO_LABELS } from '@panaderia/core';
 import { formatCents, formatUsdCents } from '../../lib/format';
+import { calcularRecordatorio, leerRecordatorioDias } from '../../lib/factura';
 import { facturaPdfB64, nombreArchivoFactura } from '../../lib/facturaPdf';
 import { guardarFacturaPdf, imprimirTicket } from '../../services/db';
 import { Button } from './Button';
@@ -21,7 +22,7 @@ function fechaLegible(fecha: string): string {
 }
 
 /// Convierte la factura en los datos mínimos que necesita el ticket térmico.
-function aTicket(f: Factura): TicketInput {
+function aTicket(f: Factura, recordatorio: string | null): TicketInput {
   return {
     negocio_nombre: f.negocio_nombre,
     negocio_rif: f.negocio_rif,
@@ -48,6 +49,7 @@ function aTicket(f: Factura): TicketInput {
       monto: d.monto,
       detalle: d.detalle.map((p) => ({ nombre: p.nombre, cantidad: p.cantidad, subtotal: p.subtotal })),
     })),
+    recordatorio,
   };
 }
 
@@ -59,6 +61,7 @@ export function FacturaModal({ factura, onClose }: Props) {
   const [ticketEnviando, setTicketEnviando] = useState(false);
   const [ticketMsg, setTicketMsg] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   const [configAbierto, setConfigAbierto] = useState(false);
+  const [recordatorio, setRecordatorio] = useState<string | null>(null);
   const guardadas = useRef<Set<number>>(new Set());
 
   const guardarPdf = async () => {
@@ -91,12 +94,23 @@ export function FacturaModal({ factura, onClose }: Props) {
     setImprimiendo(false);
   }, [factura?.venta_id]);
 
+  // Recordatorio de pago (factura a crédito próxima a vencer, según el umbral
+  // configurado por el negocio).
+  useEffect(() => {
+    setRecordatorio(null);
+    if (factura) {
+      void leerRecordatorioDias().then((umbral) =>
+        setRecordatorio(calcularRecordatorio(factura, umbral)),
+      );
+    }
+  }, [factura]);
+
   const enviarTicket = async () => {
     if (!factura) return;
     setTicketEnviando(true);
     setTicketMsg(null);
     try {
-      await imprimirTicket(aTicket(factura));
+      await imprimirTicket(aTicket(factura, recordatorio));
       setTicketMsg({ tipo: 'ok', texto: 'Ticket enviado a la impresora térmica.' });
     } catch (e) {
       setTicketMsg({ tipo: 'error', texto: String(e) });
@@ -255,50 +269,73 @@ export function FacturaModal({ factura, onClose }: Props) {
               </ul>
             </div>
 
-            {factura.devoluciones.length > 0 && (
-              <div className="border-t border-dashed border-gray-400 py-2">
-                <p className="mb-1 text-[11px] uppercase text-gray-500">
-                  Devoluciones (panes deteriorados)
-                </p>
-                {factura.devoluciones.map((dev) => (
-                  <div key={dev.id} className="mb-1.5 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">
-                        Devuelto el {dev.fecha_devolucion.slice(0, 10)}
-                        {dev.motivo ? ` · ${dev.motivo}` : ''}
-                      </span>
-                      <span className="font-semibold text-red-600">-{formatUsdCents(dev.monto)}</span>
-                    </div>
-                    {dev.detalle.length > 0 && (
-                      <ul className="ml-3 mt-0.5 space-y-0.5 border-l border-red-100 pl-3 text-[11px] text-gray-500">
-                        {dev.detalle.map((p) => (
-                          <li key={p.producto_id} className="flex justify-between gap-4">
-                            <span>{p.nombre} × {p.cantidad}</span>
-                            <span>{formatUsdCents(p.subtotal)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-                <div className="mt-1 flex justify-between text-xs font-bold">
-                  <span>Saldo final de la venta (neto)</span>
-                  <span>
-                    {formatUsdCents(
-                      Math.max(
-                        factura.total - factura.devoluciones.reduce((s, d) => s + d.monto, 0),
-                        0,
-                      ),
-                    )}
-                  </span>
-                </div>
+            {recordatorio && (
+              <div className="border-t border-dashed border-gray-400 py-2 text-center">
+                <p className="text-xs font-semibold text-gray-800">{recordatorio}</p>
               </div>
             )}
 
-            <p className="pb-1 text-center text-[11px] tracking-wide">
-              {factura.tasa_cambio > 0
-                ? `Tasa: Bs ${factura.tasa_cambio.toFixed(2)} por US$ 1`
-                : 'Gracias por su compra'}
+            <div className="border-t border-dashed border-gray-400 py-2">
+              <p className="mb-1 text-[11px] uppercase text-gray-500">NOTA:</p>
+              <div className="space-y-2">
+                <div className="border-b border-dotted border-gray-300" />
+                <div className="border-b border-dotted border-gray-300" />
+                <div className="border-b border-dotted border-gray-300" />
+              </div>
+            </div>
+
+            <div className="border-t border-dashed border-gray-400 py-2">
+              <p className="mb-1 text-[11px] uppercase text-gray-500">DEVOLUCION:</p>
+              {factura.devoluciones.length === 0 ? (
+                <div className="space-y-2">
+                  <div className="border-b border-dotted border-gray-300" />
+                  <div className="border-b border-dotted border-gray-300" />
+                </div>
+              ) : (
+                <>
+                  {factura.devoluciones.map((dev) => (
+                    <div key={dev.id} className="mb-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">
+                          Devuelto el {dev.fecha_devolucion.slice(0, 10)}
+                          {dev.motivo ? ` · ${dev.motivo}` : ''}
+                        </span>
+                        <span className="font-semibold text-red-600">-{formatUsdCents(dev.monto)}</span>
+                      </div>
+                      {dev.detalle.length > 0 && (
+                        <ul className="ml-3 mt-0.5 space-y-0.5 border-l border-red-100 pl-3 text-[11px] text-gray-500">
+                          {dev.detalle.map((p) => (
+                            <li key={p.producto_id} className="flex justify-between gap-4">
+                              <span>{p.nombre} × {p.cantidad}</span>
+                              <span>{formatUsdCents(p.subtotal)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                  <div className="mt-1 flex justify-between text-xs font-bold">
+                    <span>Saldo final de la venta (neto)</span>
+                    <span>
+                      {formatUsdCents(
+                        Math.max(
+                          factura.total - factura.devoluciones.reduce((s, d) => s + d.monto, 0),
+                          0,
+                        ),
+                      )}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {factura.tasa_cambio > 0 && (
+              <p className="pb-1 text-center text-[11px] tracking-wide">
+                Tasa: Bs {factura.tasa_cambio.toFixed(2)} por US$ 1
+              </p>
+            )}
+            <p className="pb-1 text-center text-[11px] tracking-wide font-semibold">
+              Gracias por su compra!!
             </p>
           </div>
         </div>

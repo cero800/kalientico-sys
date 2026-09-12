@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DatabaseBackup, KeyRound, RefreshCw, Save, Trash2 } from 'lucide-react';
-import { NEGOCIO_CONFIG_KEYS } from '@panaderia/core';
+import { NEGOCIO_CONFIG_KEYS, RECORDATORIO_PAGO_DIAS_KEY } from '@panaderia/core';
 import {
   cambiarPin,
   crearBackup,
@@ -11,6 +11,7 @@ import {
   type BackupItem,
 } from '../services/db';
 import { useSesion } from '../store/sesion';
+import { DEFAULT_RECORDATORIO_DIAS } from '../lib/factura';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -26,6 +27,7 @@ export default function ConfiguracionPage() {
   const [rif, setRif] = useState('');
   const [telefono, setTelefono] = useState('');
   const [direccion, setDireccion] = useState('');
+  const [recordatorioDias, setRecordatorioDias] = useState(String(DEFAULT_RECORDATORIO_DIAS));
 
   const [pinActual, setPinActual] = useState('');
   const [pinNuevo, setPinNuevo] = useState('');
@@ -45,12 +47,17 @@ export default function ConfiguracionPage() {
       getConfig(NEGOCIO_CONFIG_KEYS.rif),
       getConfig(NEGOCIO_CONFIG_KEYS.telefono),
       getConfig(NEGOCIO_CONFIG_KEYS.direccion),
+      getConfig(RECORDATORIO_PAGO_DIAS_KEY),
     ])
-      .then(([n, r, t, d]) => {
+      .then(([n, r, t, d, rd]) => {
         setNombre(n ?? '');
         setRif(r ?? '');
         setTelefono(t ?? '');
         setDireccion(d ?? '');
+        const dias = Number(rd);
+        setRecordatorioDias(
+          Number.isFinite(dias) && dias >= 0 ? String(Math.floor(dias)) : String(DEFAULT_RECORDATORIO_DIAS),
+        );
       })
       .catch(() => undefined)
       .finally(() => setCargando(false));
@@ -74,6 +81,7 @@ export default function ConfiguracionPage() {
         setConfig(NEGOCIO_CONFIG_KEYS.rif, rif.trim()),
         setConfig(NEGOCIO_CONFIG_KEYS.telefono, telefono.trim()),
         setConfig(NEGOCIO_CONFIG_KEYS.direccion, direccion.trim()),
+        setConfig(RECORDATORIO_PAGO_DIAS_KEY, String(Math.max(0, Math.floor(Number(recordatorioDias) || 0)))),
       ]);
       setGuardado(true);
     } catch {
@@ -166,6 +174,14 @@ export default function ConfiguracionPage() {
             <Input label="Teléfono" value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="0414-0000000" />
           </div>
           <Input label="Dirección" value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Ciudad, estado" />
+          <Input
+            label="Recordatorio de pago (días)"
+            hint="Cuántos días antes del vencimiento se imprime el recordatorio en las facturas a crédito"
+            type="number"
+            min={0}
+            value={recordatorioDias}
+            onChange={(e) => setRecordatorioDias(e.target.value)}
+          />
         </div>
 
         <div className="mt-6 rounded-lg bg-gray-50 p-3 text-xs text-gray-500">

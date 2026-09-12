@@ -31,6 +31,10 @@ export const NEGOCIO_CONFIG_KEYS = {
   direccion: 'negocio_direccion',
 } as const;
 
+// Cuántos días antes del vencimiento se imprime el recordatorio de pago en una
+// factura a crédito (se configura en la página de Configuración).
+export const RECORDATORIO_PAGO_DIAS_KEY = 'recordatorio_pago_dias';
+
 //---------------------------------------------------------------------------
 // Catálogo
 //---------------------------------------------------------------------------
@@ -362,6 +366,7 @@ export interface Factura {
   fecha: string;
   cliente: string;
   cliente_rif: string;
+  dias_credito: number;
   negocio_nombre: string;
   negocio_rif: string;
   negocio_telefono: string;
@@ -422,6 +427,8 @@ export interface TicketInput {
   detalle: TicketLinea[];
   pagos: TicketPago[];
   devoluciones: TicketDevolucion[];
+  /** Recordatorio de pago (factura a crédito próximo a vencer) o null. */
+  recordatorio: string | null;
 }
 
 //---------------------------------------------------------------------------
