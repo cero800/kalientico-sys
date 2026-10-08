@@ -154,4 +154,30 @@ describe('VentaPage', () => {
     expect(screen.getByText('0012')).toBeInTheDocument();
     useCarrito.getState().vaciar();
   });
+
+  it('muestra la tecla en el botón Cobrar', async () => {
+    render(<VentaPage />);
+    expect(await screen.findByRole('button', { name: /Cobrar \(F2\)/ })).toBeInTheDocument();
+  });
+
+  it('abre el cobro con F2 cuando hay productos en el carrito', async () => {
+    const user = userEvent.setup();
+    render(<VentaPage />);
+    await screen.findByRole('button', { name: /Pan Canilla/i });
+    await user.click(screen.getByRole('button', { name: /Pan Canilla/i }));
+    await user.click(screen.getByRole('button', { name: 'Agregar' }));
+
+    await user.keyboard('{F2}');
+    expect(screen.getByRole('dialog', { name: 'Cobro' })).toBeInTheDocument();
+    useCarrito.getState().vaciar();
+  });
+
+  it('no abre el cobro con F2 si el carrito está vacío', async () => {
+    const user = userEvent.setup();
+    render(<VentaPage />);
+    await screen.findByRole('button', { name: /Pan Canilla/i });
+
+    await user.keyboard('{F2}');
+    expect(screen.queryByRole('dialog', { name: 'Cobro' })).not.toBeInTheDocument();
+  });
 });

@@ -74,8 +74,18 @@ export default function VentaPage() {
   }, [clienteId]);
 
   // F6 abre/cierra el modal de precio especial del cliente seleccionado.
+  // F2 abre el cobro si hay productos en el carrito.
   useEffect(() => {
+    const esCampoEditable = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
+
     const onKey = (e: KeyboardEvent) => {
+      if (esCampoEditable(e.target)) return;
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (lineas.length > 0) setCobroAbierto(true);
+      }
       if (e.key === 'F6') {
         e.preventDefault();
         const actual = empresas.find((x) => x.id === clienteId) ?? null;
@@ -84,7 +94,7 @@ export default function VentaPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [empresas, clienteId]);
+  }, [empresas, clienteId, lineas.length]);
 
   const clienteActual = empresas.find((e) => e.id === clienteId) ?? null;
   const sePermiteCredito = clienteActual != null && !esMostrador(clienteActual);
@@ -266,7 +276,7 @@ export default function VentaPage() {
               </Button>
             )}
             <Button className="w-full" size="lg" disabled={lineas.length === 0} onClick={() => setCobroAbierto(true)}>
-              Cobrar
+              Cobrar (F2)
             </Button>
           </div>
         </div>

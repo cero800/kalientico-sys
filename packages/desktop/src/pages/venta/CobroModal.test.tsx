@@ -73,7 +73,9 @@ describe('CobroModal', () => {
     renderModal(1000, false);
     const montos = screen.getAllByLabelText(/Monto pago/);
     await user.type(montos[0], '7');
-    expect(screen.getByText(/faltan \$3\.00/i)).toBeInTheDocument();
+    expect(screen.getByText('Restante a pagar')).toBeInTheDocument();
+    expect(screen.getByText('$3.00')).toBeInTheDocument();
+    expect(screen.queryByText('Pagado')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar venta' })).toBeDisabled();
   });
 

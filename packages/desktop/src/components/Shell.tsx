@@ -90,10 +90,7 @@ export default function Shell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4">
-          <div className="flex items-center gap-3 text-sm text-gray-500">
-            <span>{caja?.fecha?.slice(0, 10) ?? '—'}</span>
-          </div>
+        <header className="flex h-12 shrink-0 items-center justify-end border-b border-gray-200 bg-white px-4">
           <div className="flex items-center gap-4 text-sm">
             <span className="text-gray-500">
               Tasa del día:{' '}
